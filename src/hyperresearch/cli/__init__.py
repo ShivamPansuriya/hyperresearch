@@ -133,3 +133,11 @@ from hyperresearch.cli.sources import app as sources_app
 app.add_typer(sources_app, name="sources", help="Fetched web sources.")
 app.add_typer(assets_app, name="assets", help="Downloaded images, screenshots, and media.")
 app.add_typer(link_app, name="link", help="Auto-discover and insert wiki-links.")
+
+# PRD extension — installs the 12-step PRD pipeline and 9 PRD subagents.
+from hyperresearch.cli.prd_install import prd_install as _prd_install
+
+app.command(
+    "prd-install",
+    help="Install the hyperresearch-PRD extension (12 step skills + 9 subagents).",
+)(_prd_install)

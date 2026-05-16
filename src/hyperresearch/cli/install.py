@@ -34,6 +34,7 @@ def install(
         install_global_hooks,
         install_hooks,
     )
+    from hyperresearch.core.prd_install import install_prd_extension
     from hyperresearch.core.vault import Vault, VaultError
 
     # Steps-only path: lazy install of the 16 step skills to a project's
@@ -43,9 +44,21 @@ def install(
     if steps_only:
         target = Path(path).resolve()
         result = _install_hyperresearch_step_skills(target)
+        # Also install the PRD extension's 12 step skills + 9 subagents so
+        # /hyperresearch-prd and the per-step PRD slash commands work right
+        # alongside the research steps.
+        prd_result = install_prd_extension(target)
         if json_output:
             output(
-                success({"steps_installed": result, "target": str(target)}, vault=None),
+                success(
+                    {
+                        "steps_installed": result,
+                        "prd_skills_installed": prd_result["skills_installed"],
+                        "prd_agents_installed": prd_result["agents_installed"],
+                        "target": str(target),
+                    },
+                    vault=None,
+                ),
                 json_mode=True,
             )
             return
@@ -54,6 +67,10 @@ def install(
             console.print(f"  {result}")
         else:
             console.print(f"[dim]Step skills already installed at {target}/.claude/skills/[/]")
+        console.print(
+            f"[green]PRD extension:[/] {len(prd_result['skills_installed'])} skills, "
+            f"{len(prd_result['agents_installed'])} agents installed at {target}/.claude/"
+        )
         return
 
     # Global install path: only the user-level Claude Code entry skill +
@@ -63,15 +80,26 @@ def install(
     # `hyperresearch install --steps-only .` on first invocation.
     if global_install:
         from hyperresearch.core.agent_docs import _resolve_executable
+        from hyperresearch.core.prd_install import install_prd_extension_global
 
         hpr_path = _resolve_executable()
         home = Path.home()
         hook_actions = install_global_hooks(home, hpr_path=hpr_path)
+        # Global-install also installs the PRD extension globally so the
+        # /hyperresearch-prd entry router and all 12 per-step slash commands
+        # work in every Claude Code session.
+        prd_result = install_prd_extension_global(home)
 
         if json_output:
             output(
                 success(
-                    {"global": True, "home": str(home), "hooks_installed": hook_actions},
+                    {
+                        "global": True,
+                        "home": str(home),
+                        "hooks_installed": hook_actions,
+                        "prd_skills_installed": prd_result["skills_installed"],
+                        "prd_agents_installed": prd_result["agents_installed"],
+                    },
                     vault=None,
                 ),
                 json_mode=True,
@@ -85,11 +113,16 @@ def install(
         else:
             console.print("[dim]All skills and agents already installed.[/]")
         console.print(
-            "\n[bold]Ready.[/] /hyperresearch is now available in every Claude Code session."
+            f"[green]PRD extension:[/] {len(prd_result['skills_installed'])} skills, "
+            f"{len(prd_result['agents_installed'])} agents installed globally."
+        )
+        console.print(
+            "\n[bold]Ready.[/] /hyperresearch and /hyperresearch-prd are now available in every Claude Code session."
         )
         console.print(
             "[dim]On first /hyperresearch run in a project, the vault, research/ folder, "
-            "and the 16 step skills are created in that project's .claude/.[/]"
+            "and the 16 step skills are created in that project's .claude/. "
+            "PRD step skills + agents are installed globally and ready to use immediately.[/]"
         )
         return
 
@@ -130,6 +163,10 @@ def install(
     # Step 4: Install Claude Code hook + skills + subagents
     hook_actions = install_hooks(root, hpr_path=hpr_path)
 
+    # Step 4b: Install the PRD extension (12 step skills + 9 subagents).
+    # The PRD pipeline runs after a research run completes.
+    prd_result = install_prd_extension(root)
+
     # Step 3: Auto-configure crawl4ai if installed
     crawl4ai_status = _setup_crawl4ai(vault)
 
@@ -139,6 +176,8 @@ def install(
         "vault": vault_action,
         "agent_docs": doc_actions,
         "hooks_installed": hook_actions,
+        "prd_skills_installed": prd_result["skills_installed"],
+        "prd_agents_installed": prd_result["agents_installed"],
         "crawl4ai": crawl4ai_status,
     }
 
@@ -162,6 +201,11 @@ def install(
         else:
             console.print("[dim]All hooks already installed.[/]")
 
+        console.print(
+            f"[green]PRD extension:[/] {len(prd_result['skills_installed'])} skills, "
+            f"{len(prd_result['agents_installed'])} agents at {root}/.claude/"
+        )
+
         if crawl4ai_status == "configured":
             console.print("[green]crawl4ai:[/] detected, set as default provider + browser ready")
         elif crawl4ai_status == "browser_installed":
@@ -173,6 +217,10 @@ def install(
             )
 
         console.print("\n[bold]Ready.[/] Agents will now check the research base before web searches.")
+        console.print(
+            "[dim]/hyperresearch generates a research report; /hyperresearch-prd then turns "
+            "a feature request + that research into a PRD.[/]"
+        )
         console.print("[dim]Tip: Run 'hyperresearch setup' for interactive configuration (profile, stealth, etc.)[/]")
 
 
