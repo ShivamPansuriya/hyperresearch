@@ -73,6 +73,37 @@ Step 17 classifies the PRD into a `pipeline_tier` (`light` / `full`). The tier i
 
 Before you invoke any step skill, do this:
 
+**0. Explicit-confirmation gate (MANDATORY).** Before doing ANY work, ask the user to confirm they actually want to run the PRD pipeline. The PRD pipeline is independent from `/hyperresearch` (the research pipeline) — research is steps 1–16 and ends at the final report; PRD is steps 17–28 and produces a different artifact. This gate exists because PRD is a heavier, slower flow than research-only, and the user may have invoked `/hyperresearch-prd` by accident.
+
+Print exactly this prompt to the user and STOP until they reply with explicit confirmation:
+
+```
+You're about to run the PRD pipeline (hyperresearch-PRD).
+
+This is NOT the research pipeline. It consumes a prior research report
+plus a feature request and produces a Product Requirements Document.
+
+Estimated time:
+- light tier: ~30–40 min
+- full tier: ~1–2 hours
+
+Required inputs:
+1. The feature request you want a PRD for (verbatim).
+2. A completed research final report (you must run /hyperresearch first
+   if you haven't already).
+3. Path to your existing PRD directory (default: prd/).
+
+If you only wanted to do research and not generate a PRD, STOP here
+and use /hyperresearch instead.
+
+Reply 'yes, proceed with PRD' (or similar explicit affirmation) to
+continue. Anything else, including silence, aborts the run.
+```
+
+Accept ONLY explicit affirmative replies (e.g., "yes", "yes proceed", "go ahead with PRD", "confirmed", "run it"). Do NOT proceed on ambiguous, conditional, or non-affirmative replies — abort and tell the user the run is cancelled. The user can re-invoke `/hyperresearch-prd` later.
+
+If the user has clearly signalled intent in the original slash invocation (e.g., they typed `/hyperresearch-prd Build a parent attendance alert feature for ManageArk...` with a real feature request in the body), you MAY skip the confirmation gate and proceed directly to step 0a — the request body itself is the confirmation. Only ask if the invocation is bare (`/hyperresearch-prd` with no body) or if you cannot tell whether the user meant research or PRD.
+
 0a. **Auto-install PRD step skills if missing.** Check that `.claude/skills/hyperresearch-prd-17-initialize/SKILL.md` exists relative to the working directory. If it does not, run `hyperresearch install --steps-only . --json` — this installs the research step skills AND the PRD step skills + 9 PRD subagents in one shot. If the binary isn't on PATH, tell the user to run `pip install hyperresearch` then re-invoke `/hyperresearch-prd`. If the file already exists, the command no-ops cheaply — safe to run unconditionally.
 
 0b. **Inputs check.** You need three things to begin:
