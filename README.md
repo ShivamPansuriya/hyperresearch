@@ -13,6 +13,8 @@
 
 ---
 
+> **Fork notice.** This is a fork of [`jordan-gibbs/hyperresearch`](https://github.com/jordan-gibbs/hyperresearch) that adds **hyperresearch-PRD** — a 12-step Product Requirements Document pipeline (steps 17–28) that consumes a research final report plus a feature request and emits an adversarially-audited PRD. Same architecture as the research pipeline: tier-adaptive, skill-chain, Read+Edit-locked patcher/polish, canonical-input-is-gospel. See [`docs/PRD_EXTENSION.md`](docs/PRD_EXTENSION.md) and the [Install](#install) section below.
+
 **Hyperresearch turns Claude Code into a deep research agent. and currently leads the DeepResearch-Bench RACE leaderboard (benchmarked internally).** A tier-adaptive 16-step pipeline produces adversarially-audited reports with full source provenance. Every fetched source lands in a persistent, searchable vault that compounds across sessions.
 
 <p align="center">
@@ -23,16 +25,33 @@
 
 ## Install
 
+### One-click install (this fork — includes both `/hyperresearch` AND `/hyperresearch-prd`)
+
+```bash
+pip install git+https://github.com/ShivamPansuriya/hyperresearch.git@prd-extension && hyperresearch install --global
+```
+
+That single line installs the package from this fork's `prd-extension` branch and registers all skills + subagents globally. After it finishes, `/hyperresearch` and `/hyperresearch-prd` are available in every Claude Code session.
+
+Per-project install (cleaner system-reminder footprint):
+
+```bash
+cd your-project
+pip install git+https://github.com/ShivamPansuriya/hyperresearch.git@prd-extension && hyperresearch install
+```
+
+Then `/hyperresearch <anything>` and `/hyperresearch-prd <feature request>` in Claude Code.
+
+### Upstream-only install (research pipeline without the PRD extension)
+
 ```bash
 cd your-project
 pip install hyperresearch && hyperresearch install
 ```
 
-Then `/hyperresearch <anything>` in Claude Code.
-
 > Python 3.11–3.13. (3.14 not yet supported — use `pyenv install 3.13`, `uv venv -p 3.13`, or `py -3.13 -m venv .venv`.)
 >
-> Power users: `hyperresearch install --global` makes `/hyperresearch` reachable from every Claude Code session anywhere, at the cost of ~15 lines in every session's system reminder. Per-project install (above) keeps unrelated CC sessions clean.
+> Power users: `hyperresearch install --global` makes both slash commands reachable from every Claude Code session anywhere, at the cost of ~15 lines in every session's system reminder. Per-project install keeps unrelated CC sessions clean.
 
 ---
 
@@ -92,6 +111,61 @@ In your prompt, you can request one of two tiers and the rest of the pipeline sc
 | `hyperresearch-patcher` | Opus | Tool-locked `[Read, Edit]`. Applies critic findings as surgical Edit hunks |
 | `hyperresearch-polish-auditor` | Opus | Tool-locked `[Read, Edit]`. Cuts filler, strips hygiene leaks |
 | `hyperresearch-readability-recommender` | Opus | Writes JSON suggestions for paragraph rhythm and list/table conversion |
+
+---
+
+## The PRD extension (steps 17–28) — fork-only
+
+The fork adds a second pipeline that consumes a completed research report plus a feature request and produces a Product Requirements Document. Same step-skill chain, same canonical-input-is-gospel invariant, same patch-never-regenerate invariant, same tool-locked subagent pattern.
+
+| #  | Step                            | Tiers |
+|----|---------------------------------|-------|
+| 17 | Initialize (tier + format + required headings) | all |
+| 18 | Product inventory (scan existing PRD directory) | all |
+| 19 | Feature decomposition + skill discovery | all |
+| 20 | Integration map (user-visible touchpoints) | full + light |
+| 21 | Personas & user stories | full + light |
+| 22 | Flows & user-visible entity fields | full |
+| 23 | Triple-draft ensemble (light: single draft) | all |
+| 24 | Synthesizer (two-pass write) | full |
+| 25 | 4 adversarial critics in parallel | full |
+| 26 | Patcher (Read+Edit only) | full |
+| 27 | Polish auditor (Read+Edit only) | all |
+| 28 | Readability audit + selective apply (FINAL) | all |
+
+**What goes in:** a verbatim feature request + a prior `/hyperresearch` final report + an optional existing PRD directory (default `prd/`).
+**What comes out:** `prd/notes/final_prd_<prd_tag>.md` — a business-only PRD (no schemas, no APIs, no architecture) ready for engineering handoff.
+
+### Tier routing
+
+| Tier   | Steps                                                       | Typical time |
+|--------|-------------------------------------------------------------|--------------|
+| `light` | 17 → 18 → 19 → 20 → 21 → 23 (single draft) → 27 → 28        | ~30–40 min   |
+| `full`  | 17 → 18 → 19 → 20 → 21 → 22 → 23 → 24 → 25 → 26 → 27 → 28   | ~1–2 hours   |
+
+### Per-step invocation
+
+Every step is independently invokable, exactly like the research pipeline's 1–16:
+
+```
+/hyperresearch-prd                              ← whole pipeline
+/hyperresearch-prd-17-initialize                ← just step 17
+/hyperresearch-prd-23-triple-draft              ← just step 23
+…
+/hyperresearch-prd-28-readability-audit         ← just step 28
+```
+
+### Skill discovery (NEW)
+
+Step 19 detects PMG-relevant Claude Code skills (`impeccable`, `frontend-design`, `content-engine`, `article-writing`, `investor-materials`, etc.) installed in your environment and writes them to `prd/relevant-skills.json`. The draft-orchestrator and synthesizer subagents read this list and invoke each listed skill via `Skill(skill: "...")` before drafting the sections it strengthens. Engineering / framework / DB skills are explicitly excluded — the PRD stays in the business lane.
+
+### Documentation
+
+- [`docs/PRD_EXTENSION.md`](docs/PRD_EXTENSION.md) — overview, tier routing, invariants, comparison to research pipeline
+- [`docs/PRD_QUICKSTART.md`](docs/PRD_QUICKSTART.md) — end-to-end walkthrough using a concrete example
+- [`docs/PRD_ARCHITECTURE.md`](docs/PRD_ARCHITECTURE.md) — internals, extension points, design rationale
+- [`docs/PRD_PER_STEP_INVOCATION.md`](docs/PRD_PER_STEP_INVOCATION.md) — recovery contract per step, manual rerun scenarios
+- [`evals/`](evals/) — 3 iterations of adversarial eval that drove findings from 15 → 8 → 3 (zero HIGH after iteration 3)
 
 ---
 
