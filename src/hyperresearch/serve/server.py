@@ -7,7 +7,7 @@ import json
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-from hyperresearch.serve import prd_scanner, prd_views
+from hyperresearch.serve import prd_scanner, prd_views, research_views
 from hyperresearch.serve.renderer import render_markdown
 
 # -- Vintage cream & dark brown theme --
@@ -127,7 +127,7 @@ mark { background: #f0d8a0; color: var(--fg); padding: 1px 2px; border-radius: 2
               background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
               padding: 6px 10px; font-size: 0.78rem; color: var(--fg-dim);
               font-family: -apple-system, sans-serif; pointer-events: none; }
-""" + prd_views.PRD_CSS
+""" + prd_views.PRD_CSS + research_views.RESEARCH_CSS
 
 FAVICON = (
     "data:image/svg+xml,"
@@ -362,7 +362,8 @@ class HyperresearchHandler(BaseHTTPRequestHandler):
         if path == "/" or path == "":
             self._serve_home()
         elif path == "/notes":
-            self._serve_index()
+            show_stubs = bool(query.get("show_stubs", ["0"])[0] in ("1", "true", "yes"))
+            self._serve_index(show_stubs=show_stubs)
         elif path.startswith("/note/"):
             note_id = urllib.parse.unquote(path[6:])
             self._serve_note(note_id)
@@ -430,11 +431,21 @@ class HyperresearchHandler(BaseHTTPRequestHandler):
             '<h3>Recent</h3>',
         ]
         rows = self.db.execute(
-            "SELECT id, title FROM notes WHERE type NOT IN ('index') "
+            "SELECT id, title, type, COALESCE(summary,'') AS summary FROM notes "
+            "WHERE type NOT IN ('index') "
             "ORDER BY COALESCE(updated, created) DESC LIMIT 15"
         ).fetchall()
         for r in rows:
-            lines.append(f'<a href="/note/{html_mod.escape(r["id"])}">{html_mod.escape(r["title"])}</a>')
+            if research_views.is_stub_note(r["summary"]):
+                continue
+            pretty = research_views.clean_title(r["title"] or "")
+            tag = "F" if (r["id"] or "").startswith("final_report_") or pretty.lower().startswith("final report") else ("I" if r["type"] == "interim" else "N")
+            tag_style = "color:#c4956a" if tag == "F" else ("color:#d4b896" if tag == "I" else "color:#7a6b57")
+            badge = f'<span style="{tag_style};font-size:0.66rem;margin-right:5px">[{tag}]</span>'
+            lines.append(
+                f'<a href="/note/{html_mod.escape(r["id"])}" title="{html_mod.escape(pretty)}">'
+                f'{badge}{html_mod.escape(pretty)}</a>'
+            )
         lines.append('</div>')
         lines.append(
             '<div class="nav-bottom">'
@@ -450,17 +461,37 @@ class HyperresearchHandler(BaseHTTPRequestHandler):
         )
         return "\n".join(lines)
 
-    def _serve_index(self):
+    def _serve_index(self, show_stubs: bool = False):
         rows = self.db.execute(
-            "SELECT id, title, status, summary, word_count FROM notes "
-            "WHERE type NOT IN ('index') ORDER BY title"
+            "SELECT id, title, type, status, COALESCE(summary,'') AS summary, "
+            "word_count FROM notes WHERE type NOT IN ('index') "
+            "ORDER BY COALESCE(updated, created) DESC"
         ).fetchall()
-        body = "<h1>All Notes</h1>\n<ul>\n"
-        for r in rows:
-            summary = f' <span style="color:var(--fg-dim);font-size:0.85rem">-- {html_mod.escape(r["summary"] or "")}</span>' if r["summary"] else ""
-            body += f'<li><a href="/note/{html_mod.escape(r["id"])}">{html_mod.escape(r["title"])}</a>{summary}</li>\n'
-        body += "</ul>"
-        self._send(200, body, "Home")
+        tag_rows = self.db.execute(
+            "SELECT note_id, tag FROM tags ORDER BY tag"
+        ).fetchall()
+        tags_by_note: dict[str, list[str]] = {}
+        for tr in tag_rows:
+            tags_by_note.setdefault(tr["note_id"], []).append(tr["tag"])
+
+        note_rows = [
+            research_views.NoteRow(
+                id=r["id"],
+                raw_title=r["title"] or "",
+                type=r["type"] or "",
+                status=r["status"] or "",
+                summary=r["summary"] or "",
+                word_count=r["word_count"] or 0,
+                tags=tags_by_note.get(r["id"], []),
+            )
+            for r in rows
+        ]
+        body = research_views.render_grouped_index(
+            note_rows,
+            show_stubs=show_stubs,
+            total_count=len(note_rows),
+        )
+        self._send(200, body, "All notes")
 
     def _serve_note(self, note_id: str):
         row = self.db.execute(
@@ -480,15 +511,18 @@ class HyperresearchHandler(BaseHTTPRequestHandler):
         ).fetchall()
 
         html_body = render_markdown(row["body"])
-        tags_html = " ".join(f'<a href="/tag/{html_mod.escape(t)}" class="tag">{html_mod.escape(t)}</a>' for t in tags)
-        status_class = row["status"]
-        meta = (
-            f'<div class="meta">'
-            f'<span class="status {status_class}">{html_mod.escape(row["status"])}</span> '
-            f'{tags_html} '
-            f'<span>{row["word_count"]} words</span>'
-            f'</div>'
+        html_body = prd_views._inject_heading_anchors(html_body, row["body"])
+        toc_html = prd_views._build_toc(row["body"])
+
+        pretty_title = research_views.clean_title(row["title"] or "")
+        meta = research_views.render_note_meta_header(
+            title=pretty_title,
+            note_type=row["type"] or "",
+            status=row["status"] or "",
+            tags=tags,
+            word_count=row["word_count"] or 0,
         )
+        title_block = f'<h1>{html_mod.escape(pretty_title)}</h1>' if pretty_title else ""
         bl_html = ""
         if backlinks:
             bl_items = "\n".join(
@@ -505,8 +539,8 @@ class HyperresearchHandler(BaseHTTPRequestHandler):
 
         self._send(
             200,
-            f"{meta}\n{html_body}\n{related_prds_html}\n{bl_html}",
-            html_mod.escape(row["title"]),
+            f"{title_block}\n{meta}\n{toc_html}\n{html_body}\n{related_prds_html}\n{bl_html}",
+            html_mod.escape(pretty_title or row["title"]),
         )
 
     def _serve_tag(self, tag: str):
