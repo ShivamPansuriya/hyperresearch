@@ -74,11 +74,22 @@ PRD_CSS = """
                     color: var(--accent); font-size: 0.85rem; }
 .empty-state h2 { color: var(--fg); border: none; margin-bottom: 0.6rem; }
 
-.toc-sticky { float: right; width: 260px; margin-left: 2rem; margin-bottom: 1rem;
+/* When a page contains a TOC, switch main into a 2-column grid so prose
+   and TOC have their own columns. The old float-right + position-sticky
+   combo leaked content under the sticky element on long pages. */
+main:has(.toc-sticky) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  column-gap: 2rem;
+  align-items: start;
+}
+main:has(.toc-sticky) > * { grid-column: 1; min-width: 0; }
+.toc-sticky { grid-column: 2; grid-row: 1 / -1; align-self: start;
+              position: sticky; top: 1.2rem; width: 260px;
+              max-height: calc(100vh - 3rem); overflow-y: auto;
               padding: 0.9rem 1rem; background: var(--bg-alt);
               border: 1px solid var(--border); border-radius: 6px;
-              font-size: 0.82rem; position: sticky; top: 1rem; max-height: 85vh;
-              overflow-y: auto; }
+              font-size: 0.82rem; }
 .toc-sticky h4 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em;
                  color: var(--accent); margin-bottom: 0.4rem; }
 .toc-sticky ul { list-style: none; margin: 0; padding: 0; }
@@ -86,7 +97,10 @@ PRD_CSS = """
 .toc-sticky li.h3 { padding-left: 0.7rem; }
 .toc-sticky a { border: none; color: var(--link); }
 .toc-sticky a:hover { color: var(--accent); }
-@media (max-width: 1280px) { .toc-sticky { display: none; } }
+@media (max-width: 1280px) {
+  main:has(.toc-sticky) { display: block; }
+  .toc-sticky { display: none; }
+}
 """
 
 
