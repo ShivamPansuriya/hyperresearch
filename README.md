@@ -33,18 +33,36 @@ pip install git+https://github.com/ShivamPansuriya/hyperresearch.git@prd-extensi
 
 That single line installs the package from this fork's `prd-extension` branch and registers all skills + subagents globally. After it finishes, `/hyperresearch` and `/hyperresearch-prd` are available in every Claude Code session.
 
-Per-project install (cleaner system-reminder footprint, **auto-launches the UI**):
+Per-project install (cleaner system-reminder footprint, **auto-launches the UI in the background**):
 
 ```bash
 cd your-project
+pip install git+https://github.com/ShivamPansuriya/hyperresearch.git@prd-extension && hyperresearch install --serve --detach
+```
+
+What this does:
+
+- Installs the package and registers all skills + subagents.
+- Starts the interactive UI on `http://127.0.0.1:9089` as a **backgrounded process** (terminal returns to your prompt immediately).
+- Opens your browser to the Features page.
+- Writes the server PID to `.hyperresearch/serve.pid` and logs to `.hyperresearch/serve.log` inside the project.
+- Stop it any time with `hyperresearch serve-stop` (or `kill $(cat .hyperresearch/serve.pid)`).
+
+Foreground variant (UI runs in the same terminal, Ctrl+C to stop, terminal stays "locked" until you do):
+
+```bash
 pip install git+https://github.com/ShivamPansuriya/hyperresearch.git@prd-extension && hyperresearch install --serve
 ```
 
-The `--serve` flag tells the installer to auto-start the interactive UI on `http://127.0.0.1:9089` and open your browser the moment install completes — no second command needed. Drop the flag if you'd rather start the UI manually later (`hyperresearch serve --open`).
+Plain install with no UI (start it later with `hyperresearch serve --open`):
+
+```bash
+pip install git+https://github.com/ShivamPansuriya/hyperresearch.git@prd-extension && hyperresearch install
+```
 
 Then `/hyperresearch <anything>` and `/hyperresearch-prd <feature request>` in Claude Code.
 
-> Note: `--serve` only applies to per-project install. It does not apply to `--global` (no vault context) or `--steps-only` (used internally by the slash-command bootstrap). Start the UI manually from your project root in those cases: `hyperresearch serve --open`.
+> Note: `--serve` / `--detach` only apply to per-project install. They do not apply to `--global` (no vault context) or `--steps-only` (used internally by the slash-command bootstrap). Start the UI manually from your project root in those cases: `hyperresearch serve --open`.
 
 ### Upstream-only install (research pipeline without the PRD extension)
 
