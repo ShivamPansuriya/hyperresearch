@@ -74,10 +74,10 @@ PRD_CSS = """
                     color: var(--accent); font-size: 0.85rem; }
 .empty-state h2 { color: var(--fg); border: none; margin-bottom: 0.6rem; }
 
-.toc-sticky { float: right; width: 220px; margin-left: 1.5rem; margin-bottom: 1rem;
-              padding: 0.8rem 0.9rem; background: var(--bg-alt);
+.toc-sticky { float: right; width: 260px; margin-left: 2rem; margin-bottom: 1rem;
+              padding: 0.9rem 1rem; background: var(--bg-alt);
               border: 1px solid var(--border); border-radius: 6px;
-              font-size: 0.82rem; position: sticky; top: 1rem; max-height: 80vh;
+              font-size: 0.82rem; position: sticky; top: 1rem; max-height: 85vh;
               overflow-y: auto; }
 .toc-sticky h4 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em;
                  color: var(--accent); margin-bottom: 0.4rem; }
@@ -86,7 +86,7 @@ PRD_CSS = """
 .toc-sticky li.h3 { padding-left: 0.7rem; }
 .toc-sticky a { border: none; color: var(--link); }
 .toc-sticky a:hover { color: var(--accent); }
-@media (max-width: 1100px) { .toc-sticky { display: none; } }
+@media (max-width: 1280px) { .toc-sticky { display: none; } }
 """
 
 

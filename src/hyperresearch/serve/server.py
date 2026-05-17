@@ -65,7 +65,10 @@ nav .brand-sub { font-size: 0.7rem; color: var(--fg-dim); margin-top: -0.2rem; m
               cursor: col-resize; background: transparent; z-index: 10; }
 .nav-handle:hover { background: var(--accent-light); }
 
-main { margin-left: var(--nav-width); padding: 2.5rem 3rem; max-width: 860px; flex: 1; }
+main { margin-left: var(--nav-width); padding: 2.5rem 3rem;
+       max-width: min(1400px, calc(100vw - var(--nav-width)));
+       width: 100%; flex: 1; box-sizing: border-box; }
+main .prose-narrow { max-width: 880px; }
 main h1 { margin-bottom: 0.5rem; font-weight: 700; color: var(--fg); }
 main h2 { margin-top: 2rem; margin-bottom: 0.5rem; border-bottom: 1px solid var(--border);
            padding-bottom: 0.3rem; color: var(--accent); }
