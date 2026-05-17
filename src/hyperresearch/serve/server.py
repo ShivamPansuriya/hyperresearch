@@ -645,7 +645,7 @@ class HyperresearchHandler(BaseHTTPRequestHandler):
         pass
 
 
-def run_server(vault, port: int = 8080, open_browser: bool = False):
+def run_server(vault, port: int = 9089, open_browser: bool = False):
     import signal
     import sys
 

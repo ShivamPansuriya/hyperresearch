@@ -25,6 +25,16 @@ def install(
         "--steps-only",
         help="Install only the 16 step skills to <PATH>/.claude/skills/. Used internally by the entry skill bootstrap on first /hyperresearch invocation in a project. Not normally invoked by users.",
     ),
+    serve_after: bool = typer.Option(
+        False,
+        "--serve",
+        help="After install completes, automatically start the interactive UI server (binds 127.0.0.1:9089 and opens your browser). Recommended for one-command setup. Foreground process — Ctrl+C to stop.",
+    ),
+    serve_port: int = typer.Option(
+        9089,
+        "--serve-port",
+        help="Port the auto-launched UI binds to (only used with --serve).",
+    ),
 ) -> None:
     """Install hyperresearch: init vault + inject CLAUDE.md + install Claude Code hooks."""
     import sys
@@ -71,6 +81,11 @@ def install(
             f"[green]PRD extension:[/] {len(prd_result['skills_installed'])} skills, "
             f"{len(prd_result['agents_installed'])} agents installed at {target}/.claude/"
         )
+        if serve_after:
+            console.print(
+                "[dim]--serve ignored for --steps-only (no vault context). "
+                "Run `hyperresearch serve` from the project root after install.[/]"
+            )
         return
 
     # Global install path: only the user-level Claude Code entry skill +
@@ -124,6 +139,11 @@ def install(
             "and the 16 step skills are created in that project's .claude/. "
             "PRD step skills + agents are installed globally and ready to use immediately.[/]"
         )
+        if serve_after:
+            console.print(
+                "[dim]--serve ignored for --global (no vault context). "
+                "Run `hyperresearch serve` inside a project that has the vault initialized.[/]"
+            )
         return
 
     root = Path(path).resolve()
@@ -222,6 +242,20 @@ def install(
             "a feature request + that research into a PRD.[/]"
         )
         console.print("[dim]Tip: Run 'hyperresearch setup' for interactive configuration (profile, stealth, etc.)[/]")
+        if not serve_after:
+            console.print(
+                f"[dim]UI tip: pass --serve next time to auto-launch the browser, or run "
+                f"`hyperresearch serve --open` (port {serve_port}) now.[/]"
+            )
+
+    if serve_after:
+        console.print(
+            f"\n[bold]Starting UI:[/] http://127.0.0.1:{serve_port} "
+            "[dim](Ctrl+C to stop)[/]"
+        )
+        vault.auto_sync()
+        from hyperresearch.serve.server import run_server
+        run_server(vault, port=serve_port, open_browser=True)
 
 
 def _setup_crawl4ai(vault) -> str:

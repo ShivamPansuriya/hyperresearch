@@ -33,14 +33,18 @@ pip install git+https://github.com/ShivamPansuriya/hyperresearch.git@prd-extensi
 
 That single line installs the package from this fork's `prd-extension` branch and registers all skills + subagents globally. After it finishes, `/hyperresearch` and `/hyperresearch-prd` are available in every Claude Code session.
 
-Per-project install (cleaner system-reminder footprint):
+Per-project install (cleaner system-reminder footprint, **auto-launches the UI**):
 
 ```bash
 cd your-project
-pip install git+https://github.com/ShivamPansuriya/hyperresearch.git@prd-extension && hyperresearch install
+pip install git+https://github.com/ShivamPansuriya/hyperresearch.git@prd-extension && hyperresearch install --serve
 ```
 
+The `--serve` flag tells the installer to auto-start the interactive UI on `http://127.0.0.1:9089` and open your browser the moment install completes — no second command needed. Drop the flag if you'd rather start the UI manually later (`hyperresearch serve --open`).
+
 Then `/hyperresearch <anything>` and `/hyperresearch-prd <feature request>` in Claude Code.
+
+> Note: `--serve` only applies to per-project install. It does not apply to `--global` (no vault context) or `--steps-only` (used internally by the slash-command bootstrap). Start the UI manually from your project root in those cases: `hyperresearch serve --open`.
 
 ### Upstream-only install (research pipeline without the PRD extension)
 
@@ -174,7 +178,7 @@ Step 19 detects PMG-relevant Claude Code skills (`impeccable`, `frontend-design`
 Markdown notes are great for archival, terrible for navigation. The fork ships a built-in browser-based UI that **cross-links research and PRDs by feature**, so a finished feature reads as one coherent thing instead of two parallel directories.
 
 ```bash
-hyperresearch serve --port 8080 --open
+hyperresearch serve --port 9089 --open
 ```
 
 What's in it:

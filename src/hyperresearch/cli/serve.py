@@ -8,7 +8,7 @@ from hyperresearch.cli._output import console
 
 
 def serve(
-    port: int = typer.Option(8080, "--port", "-p", help="Port to serve on"),
+    port: int = typer.Option(9089, "--port", "-p", help="Port to serve on"),
     open_browser: bool = typer.Option(False, "--open", "-o", help="Open browser automatically"),
 ) -> None:
     """Start a web server to browse the vault."""
