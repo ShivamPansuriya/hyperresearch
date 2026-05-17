@@ -7,6 +7,7 @@ import json
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
+from hyperresearch.serve import prd_scanner, prd_views
 from hyperresearch.serve.renderer import render_markdown
 
 # -- Vintage cream & dark brown theme --
@@ -126,7 +127,7 @@ mark { background: #f0d8a0; color: var(--fg); padding: 1px 2px; border-radius: 2
               background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
               padding: 6px 10px; font-size: 0.78rem; color: var(--fg-dim);
               font-family: -apple-system, sans-serif; pointer-events: none; }
-"""
+""" + prd_views.PRD_CSS
 
 FAVICON = (
     "data:image/svg+xml,"
@@ -350,12 +351,17 @@ class HyperresearchHandler(BaseHTTPRequestHandler):
             self.__class__._db.row_factory = sqlite3.Row
         return self.__class__._db
 
+    def _prd_records(self):
+        return prd_scanner.scan_prds(self.__class__.vault.root)
+
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         query = urllib.parse.parse_qs(parsed.query)
 
         if path == "/" or path == "":
+            self._serve_home()
+        elif path == "/notes":
             self._serve_index()
         elif path.startswith("/note/"):
             note_id = urllib.parse.unquote(path[6:])
@@ -372,6 +378,18 @@ class HyperresearchHandler(BaseHTTPRequestHandler):
             self._serve_graph()
         elif path == "/api/graph":
             self._serve_graph_api()
+        elif path == "/features":
+            self._serve_features()
+        elif path.startswith("/feature/"):
+            tag = urllib.parse.unquote(path[len("/feature/"):])
+            self._serve_feature(tag)
+        elif path == "/prds":
+            self._serve_prds()
+        elif path.startswith("/prd/"):
+            tag = urllib.parse.unquote(path[len("/prd/"):])
+            self._serve_prd(tag)
+        elif path == "/api/features":
+            self._serve_features_api()
         else:
             self._send(404, "<h1>Not Found</h1>")
 
@@ -405,6 +423,9 @@ class HyperresearchHandler(BaseHTTPRequestHandler):
             '<form action="/search"><div class="search-box">'
             '<input type="text" name="q" placeholder="Search..."></div></form>',
             '<a href="/">Home</a>',
+            '<a href="/features">Features</a>',
+            '<a href="/prds">PRDs</a>',
+            '<a href="/notes">All notes</a>',
             '<a href="/tags">Tags</a>',
             '<h3>Recent</h3>',
         ]
@@ -474,7 +495,19 @@ class HyperresearchHandler(BaseHTTPRequestHandler):
                 f'<li><a href="/note/{html_mod.escape(r["source_id"])}">{html_mod.escape(r["title"])}</a></li>' for r in backlinks
             )
             bl_html = f'<div class="backlinks"><h3>Backlinks</h3><ul>{bl_items}</ul></div>'
-        self._send(200, f"{meta}\n{html_body}\n{bl_html}", html_mod.escape(row["title"]))
+
+        related_prds_html = ""
+        try:
+            related = prd_scanner.prds_for_research(self._prd_records(), note_id)
+            related_prds_html = prd_views.render_related_prds_panel(related)
+        except Exception:
+            related_prds_html = ""
+
+        self._send(
+            200,
+            f"{meta}\n{html_body}\n{related_prds_html}\n{bl_html}",
+            html_mod.escape(row["title"]),
+        )
 
     def _serve_tag(self, tag: str):
         rows = self.db.execute(
@@ -520,6 +553,61 @@ class HyperresearchHandler(BaseHTTPRequestHandler):
             )
         body += "</div>"
         self._send(200, body, f"Search: {safe_q}")
+
+    def _serve_home(self):
+        records = self._prd_records()
+        if records:
+            groups = prd_scanner.feature_groups(records)
+            body = prd_views.render_features_index(groups)
+            self._send(200, body, "Home")
+            return
+        self._serve_index()
+
+    def _serve_features(self):
+        records = self._prd_records()
+        groups = prd_scanner.feature_groups(records)
+        body = prd_views.render_features_index(groups)
+        self._send(200, body, "Features")
+
+    def _serve_feature(self, prd_tag: str):
+        records = self._prd_records()
+        record = prd_scanner.find_prd(records, prd_tag)
+        if not record:
+            self._send(404, f"<h1>Feature not found: {html_mod.escape(prd_tag)}</h1>")
+            return
+        title, body = prd_views.render_feature_detail(record)
+        self._send(200, body, html_mod.escape(title))
+
+    def _serve_prds(self):
+        records = self._prd_records()
+        body = prd_views.render_prds_index(records)
+        self._send(200, body, "PRDs")
+
+    def _serve_prd(self, prd_tag: str):
+        records = self._prd_records()
+        record = prd_scanner.find_prd(records, prd_tag)
+        if not record:
+            self._send(404, f"<h1>PRD not found: {html_mod.escape(prd_tag)}</h1>")
+            return
+        title, body = prd_views.render_prd_detail(record)
+        self._send(200, body, html_mod.escape(title))
+
+    def _serve_features_api(self):
+        records = self._prd_records()
+        payload = [
+            {
+                "prd_tag": r.prd_tag,
+                "title": r.title,
+                "tier": r.tier,
+                "modality": r.modality,
+                "word_count": r.word_count,
+                "research_note_id": r.research_note_id,
+                "research_path": r.research_path,
+                "has_feature_request": r.feature_request is not None,
+            }
+            for r in records
+        ]
+        self._send_json({"features": payload, "count": len(payload)})
 
     def _serve_graph(self):
         body = (

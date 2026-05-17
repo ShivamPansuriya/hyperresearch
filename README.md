@@ -169,6 +169,27 @@ Step 19 detects PMG-relevant Claude Code skills (`impeccable`, `frontend-design`
 
 ---
 
+## Interactive UI — fork-only
+
+Markdown notes are great for archival, terrible for navigation. The fork ships a built-in browser-based UI that **cross-links research and PRDs by feature**, so a finished feature reads as one coherent thing instead of two parallel directories.
+
+```bash
+hyperresearch serve --port 8080 --open
+```
+
+What's in it:
+
+- **Features view** (`/features`) — every PRD shown as a card with feature-request snippet, tier badge, and one-click links to its research note and full PRD. This is the new home page when PRDs exist.
+- **Feature detail** (`/feature/<prd_tag>`) — the canonical feature page: feature request at the top, cross-links to research and the full PRD page, then the PRD rendered inline with a sticky table of contents.
+- **Linked PRDs panel** — when viewing a research note that drove one or more PRDs, a sidebar lists them so you can jump from research → PRD without leaving the page.
+- **PRD index** (`/prds`) — flat newest-first list of all PRDs with tier / modality / word count.
+- **Existing surfaces preserved** — All Notes (`/notes`), Tags, full-text search, force-directed Graph all still work.
+- **JSON API** — `/api/features` and `/api/graph` return structured data for tooling.
+
+Cross-links are computed from the `research_final_report_path` frontmatter field that the PRD pipeline writes into every PRD — no extra metadata maintenance, no database migration. The UI is stdlib-only (no extra deps) and runs locally on `127.0.0.1`.
+
+---
+
 ## The vault: persistent, searchable, compounding
 
 Hyperresearch is not a one-shot report generator like most other Deep research harnesses. Every fetched source lands in a SQLite-indexed vault that every future research session can reuse.
