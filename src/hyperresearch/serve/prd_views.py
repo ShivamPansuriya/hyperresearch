@@ -83,7 +83,7 @@ main:has(.toc-sticky) {
   column-gap: 2rem;
   align-items: start;
 }
-main:has(.toc-sticky) > * { grid-column: 1; min-width: 0; }
+main:has(.toc-sticky) > *:not(.toc-sticky) { grid-column: 1; min-width: 0; }
 .toc-sticky { grid-column: 2; grid-row: 1 / -1; align-self: start;
               position: sticky; top: 1.2rem; width: 260px;
               max-height: calc(100vh - 3rem); overflow-y: auto;
