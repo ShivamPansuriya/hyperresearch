@@ -95,10 +95,12 @@ def install(
         # /hyperresearch-prd entry router and all 12 per-step slash commands
         # work in every Claude Code session.
         prd_result = install_prd_extension_global(home)
-        # Add the Exa MCP server entry to ~/.claude.json if an API key is
-        # provided via --exa-api-key or EXA_API_KEY. Silently skipped if no
-        # key is available — the pipeline still works with WebSearch only.
-        exa_status, exa_message = install_exa_mcp(exa_api_key)
+        # Add the Exa MCP server entry to ~/.claude.json. Resolves the key
+        # from --exa-api-key, then EXA_API_KEY env, then (if interactive and
+        # not already configured) prompts the user. Skips silently if no key
+        # is available — the pipeline still works with WebSearch only.
+        resolved_key = _resolve_exa_key_with_optional_prompt(exa_api_key, json_output)
+        exa_status, exa_message = install_exa_mcp(resolved_key or None)
 
         if json_output:
             output(
@@ -182,9 +184,11 @@ def install(
     # Step 3: Auto-configure crawl4ai if installed
     crawl4ai_status = _setup_crawl4ai(vault)
 
-    # Step 4c: Add Exa MCP server entry to ~/.claude.json if an API key is
-    # supplied. Silently skipped if no key — pipeline works without it.
-    exa_status, exa_message = install_exa_mcp(exa_api_key)
+    # Step 4c: Add Exa MCP server entry to ~/.claude.json. Resolves the key
+    # from --exa-api-key, then EXA_API_KEY env, then (if interactive and
+    # not already configured) prompts the user. Skipped silently if no key.
+    resolved_key = _resolve_exa_key_with_optional_prompt(exa_api_key, json_output)
+    exa_status, exa_message = install_exa_mcp(resolved_key or None)
 
     # Step 5: Report
     data = {
@@ -241,6 +245,60 @@ def install(
             "a feature request + that research into a PRD.[/]"
         )
         console.print("[dim]Tip: Run 'hyperresearch setup' for interactive configuration (profile, stealth, etc.)[/]")
+
+
+def _resolve_exa_key_with_optional_prompt(cli_arg: str, json_output: bool) -> str:
+    """Resolve the Exa API key from --exa-api-key, then EXA_API_KEY env, then
+    (if interactive and not already configured) prompt the user.
+
+    Returns the resolved key, or an empty string to signal 'skip Exa install'.
+
+    Skips the prompt when:
+      - A key was already supplied via flag or env.
+      - We are in --json mode or stdin is not a TTY.
+      - ~/.claude.json already has an exa* entry (idempotent).
+    """
+    import json as _json
+    import sys
+    from hyperresearch.core.exa_mcp import existing_exa_entry, resolve_api_key
+
+    # Already have a key from flag or env?
+    resolved = resolve_api_key(cli_arg or None)
+    if resolved:
+        return resolved
+
+    # Non-interactive (JSON / piped / CI) — skip prompt, let installer skip.
+    if json_output or not sys.stdin.isatty():
+        return ""
+
+    # Exa already configured? Skip prompt — installer is idempotent and will
+    # report 'already_configured' downstream.
+    claude_json_path = Path.home() / ".claude.json"
+    if claude_json_path.exists():
+        try:
+            data = _json.loads(claude_json_path.read_text(encoding="utf-8"))
+            if existing_exa_entry(data.get("mcpServers", {})):
+                return ""
+        except _json.JSONDecodeError:
+            pass
+
+    # Interactive prompt.
+    from rich.prompt import Prompt
+
+    console.print()
+    console.print(
+        "[bold cyan]Exa MCP — neural web search (optional)[/]"
+    )
+    console.print(
+        "[dim]With an Exa API key, the fetcher and corpus-critic agents use[/]"
+    )
+    console.print(
+        "[dim]neural search for higher-signal discovery. Get a key at https://exa.ai[/]"
+    )
+    console.print(
+        "[dim]Press Enter to skip — the pipeline still works with WebSearch only.[/]"
+    )
+    return Prompt.ask("  Exa API key (blank to skip)", default="").strip()
 
 
 def _print_exa_status(status: str, message: str) -> None:

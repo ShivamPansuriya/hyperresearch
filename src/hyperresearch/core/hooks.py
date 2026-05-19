@@ -355,6 +355,23 @@ reading of the evidence.
    running web searches. Academic APIs return citation-ranked canonical
    papers; web search returns derivative commentary.
 
+   **Exa hint for the fetcher.** The spawned fetcher has Exa MCP tools
+   available (`web_search_exa`, `web_search_advanced_exa`,
+   `deep_search_exa`, `get_code_context_exa`, `crawling_exa`). When you
+   construct the Task prompt for it, include an `exa_search_hint` field
+   that names the ideal page in natural language AND a
+   `preferred_exa_mode` field that picks the best tool by locus shape:
+
+   - Locus is **academic / scholarly** → `web_search_advanced_exa(category: "research paper")` (after academic APIs)
+   - Locus is **a current event / recent industry move** → `web_search_advanced_exa(category: "news", startPublishedDate: "<relevant>")`
+   - Locus is **a company-specific question** → `web_search_advanced_exa(category: "company")`
+   - Locus is **a specific factual question needing cited synthesis** → `deep_search_exa` (sparingly)
+   - Locus is **code / API / library question** → `get_code_context_exa`
+   - Locus is **open discovery** → `web_search_exa`
+
+   The fetcher silently falls back to plain `WebSearch` when the Exa
+   MCP isn't configured — pass the hints regardless.
+
 5. **Read the fetched sources.** Use `{hpr_path} note show <id> -j`. Quote
    the passages that actually move your locus's argument. Do NOT paraphrase
    when a direct quote would be stronger evidence.

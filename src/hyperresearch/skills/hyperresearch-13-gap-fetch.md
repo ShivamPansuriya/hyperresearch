@@ -42,7 +42,21 @@ Read these inputs:
 
    If 0 fetch-worthy gaps: log "no gaps to fill" and proceed directly to step 14.
 
+   **If `research/corpus-critic-gaps.json` exists from step 8**, read it. Each gap entry there may carry:
+   - `external_probe_hits`: URLs the corpus-critic already surfaced via its Exa verification probe. These are pre-validated — fetch them first.
+   - `preferred_exa_category`: the `web_search_advanced_exa` category that best matches the gap type (`research paper`, `news`, `pdf`, `financial report`, `company`, `people`). Pass this hint to the spawned fetcher.
+
 4. **Run targeted fetch wave.** For each gap, generate 2-3 search queries and collect URLs. Spawn **2-4 fetchers** with the gap-filling URLs.
+
+   **Exa-aware search hint.** When you craft each search query for a fetcher, also tell the fetcher which Exa mode to prefer based on the gap type:
+
+   - Academic / scholarly gap → `mcp__exa__web_search_advanced_exa(category: "research paper")` (after academic APIs)
+   - News / event / timeline gap → `mcp__exa__web_search_advanced_exa(category: "news", startPublishedDate: "<relevant date>")`
+   - Government filing / regulatory gap → `mcp__exa__web_search_advanced_exa(category: "pdf" or "financial report")`
+   - Adversarial / dissenting view → `mcp__exa__web_search_exa` with a noun-phrase ("blog post arguing against <claim>")
+   - Open-ended discovery → `mcp__exa__web_search_exa`
+
+   The fetcher silently falls back to plain `WebSearch` if Exa isn't configured — never block on missing Exa.
 
    **Spawn template:**
    ```
@@ -62,7 +76,12 @@ Read these inputs:
      - vault_tag: <vault_tag>
      - urls: [<gap-targeted URLs>]
      - extra_tags: ["post-critic-fill"]
+     - exa_search_hint: <natural-language description of the ideal page>
+     - preferred_exa_mode: <web_search_exa | web_search_advanced_exa | deep_search_exa | get_code_context_exa>
+     - preferred_exa_category: <research paper | news | pdf | financial report | company | people | none>
    ```
+
+   If the corpus-critic supplied `external_probe_hits`, include those URLs in the `urls` list FIRST — they're pre-validated by step 8's Exa probe and should land in the vault before the fetcher searches further.
 
    Each fetcher: fetches, quality-checks, summarizes, extracts claims (same procedure as step 2). Tags notes with `vault_tag` + `post-critic-fill`. Writes claims to `research/temp/claims-<note-id>.json`.
 

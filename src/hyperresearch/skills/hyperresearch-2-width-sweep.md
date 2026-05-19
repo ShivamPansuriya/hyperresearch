@@ -63,15 +63,26 @@ Before spawning any fetchers, produce a **search plan** that maps the decomposit
    - **Earnings-call transcripts are insufficient on their own.** Transcripts narrate already-rounded numbers ("revenue grew about 27%"); rubrics demand the tabular line items from the filing itself. If the prompt names a fiscal period, the search plan MUST include a query for the filing PDF, not just the transcript.
    - Goal: every period in `time_periods` has at least one search that, if successful, fetches the filing's tabular data — not a paraphrase of it.
 
-3. **Write the combined search plan to `research/temp/search-plan.md`** — a table with a `Lens` column:
+3. **Write the combined search plan to `research/temp/search-plan.md`** — a table with `Lens` and `Exa mode` columns. The `Exa mode` column tells the fetcher (or your own search invocation) which tool to prefer; the fetcher silently falls back to plain `WebSearch` when Exa isn't configured.
+
    ```markdown
-   | Atomic item | Search query | Type | Lens | Target |
-   |---|---|---|---|---|
-   | Sub-Q1 | "China financial industry growth trends 2025" | web | breadth | factual |
-   | Sub-Q1 | "China financial sector structural risks" | web | adversarial | contrarian |
-   | Sub-Q1 | "financial repression China scholarly analysis" | academic | depth | canonical |
-   | Entity: PE | "China private equity returns academic study" | academic | depth | canonical |
+   | Atomic item | Search query | Type | Lens | Exa mode | Target |
+   |---|---|---|---|---|---|
+   | Sub-Q1 | "China financial industry growth trends 2025" | web | breadth | web_search_advanced_exa(category:"news", startPublishedDate:"2024-01-01") | factual |
+   | Sub-Q1 | "China financial sector structural risks" | web | adversarial | web_search_exa | contrarian |
+   | Sub-Q1 | "financial repression China scholarly analysis" | academic | depth | web_search_advanced_exa(category:"research paper") | canonical |
+   | Entity: PE | "China private equity returns academic study" | academic | depth | API:SemanticScholar -> web_search_advanced_exa(category:"research paper") | canonical |
+   | Sub-Q2 | "Tesla Q3 2024 10-Q segment revenue" | filing | period-pinned | web_search_advanced_exa(category:"financial report", dates 2024-09..2024-12) | tabular |
    ```
+
+   **Exa mode picker (use as your default routing table):**
+   - **Discovery / breadth** → `web_search_exa` (natural-language description of the ideal page)
+   - **Date-constrained / domain-constrained / category-constrained** → `web_search_advanced_exa` with the right `category` (`research paper`, `news`, `pdf`, `company`, `people`, `financial report`, `github`, `personal site`) and any `startPublishedDate` / `includeDomains` filters
+   - **Single specific factual question needing cited synthesis** → `deep_search_exa` (use SPARINGLY — slow, 4-50s)
+   - **Code / API / library example needed** → `get_code_context_exa`
+   - **Period-pinned regulatory filings (SEC, Companies House)** → `web_search_advanced_exa(category: "financial report" | "pdf")` with the exact period as `startPublishedDate` / `endPublishedDate`
+   - **Adversarial / contrarian** → `web_search_exa` with the adversarial query as a noun-phrase ("blog post arguing X is wrong")
+   - **Academic literature** → academic APIs FIRST via plain `Bash` + `curl`, THEN `web_search_advanced_exa(category: "research paper")` to backfill
 
    Plan typically has **40–100 planned searches** for a `full` query.
 
@@ -92,9 +103,18 @@ Before spawning any fetchers, produce a **search plan** that maps the decomposit
 
 ## Step 2.2 — Execute searches and build URL queue
 
-1. **Academic APIs first.** For topics with a research literature, hit Semantic Scholar / arXiv / OpenAlex / PubMed BEFORE web search. Academic APIs return citation-ranked canonical papers.
+1. **Academic APIs first.** For topics with a research literature, hit Semantic Scholar / arXiv / OpenAlex / PubMed BEFORE general web search. Academic APIs return citation-ranked canonical papers.
 
-2. **Web searches from the plan.** Execute ALL planned searches across all three lenses. Aim for **80–120 candidate URLs** before deduplication for `full` tier.
+2. **Web searches from the plan — prefer Exa over `WebSearch` when available.** Execute ALL planned searches across all three lenses, using the `Exa mode` column from your plan to pick the right tool per query:
+
+   - `web_search_exa` for natural-language discovery (Lens A/C breadth + adversarial)
+   - `web_search_advanced_exa` for any query that needs a date filter, domain whitelist, or category target (Lens B canonical + Lens D period-pinned)
+   - `deep_search_exa` SPARINGLY for one-shot synthesized questions
+   - `get_code_context_exa` if any query asks for code / API examples
+
+   If the Exa MCP isn't installed (`mcp__exa__*` tools return "not available" or "missing API key"), fall back to plain `WebSearch` — the search plan still executes, just with lower-signal results.
+
+   Aim for **80–120 candidate URLs** before deduplication for `full` tier.
 
 3. **Build and deduplicate the master URL queue.** Remove exact-URL duplicates. Remove obvious junk domains. The deduplicated queue should have **60–100 URLs** for `full` tier.
 
