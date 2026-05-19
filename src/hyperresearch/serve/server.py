@@ -7,7 +7,6 @@ import json
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-from hyperresearch.serve import prd_scanner, prd_views, research_views
 from hyperresearch.serve.renderer import render_markdown
 
 # -- Vintage cream & dark brown theme --
@@ -65,10 +64,7 @@ nav .brand-sub { font-size: 0.7rem; color: var(--fg-dim); margin-top: -0.2rem; m
               cursor: col-resize; background: transparent; z-index: 10; }
 .nav-handle:hover { background: var(--accent-light); }
 
-main { margin-left: var(--nav-width); padding: 2.5rem 3rem;
-       max-width: min(1400px, calc(100vw - var(--nav-width)));
-       width: 100%; flex: 1; box-sizing: border-box; }
-main .prose-narrow { max-width: 880px; }
+main { margin-left: var(--nav-width); padding: 2.5rem 3rem; max-width: 860px; flex: 1; }
 main h1 { margin-bottom: 0.5rem; font-weight: 700; color: var(--fg); }
 main h2 { margin-top: 2rem; margin-bottom: 0.5rem; border-bottom: 1px solid var(--border);
            padding-bottom: 0.3rem; color: var(--accent); }
@@ -130,7 +126,7 @@ mark { background: #f0d8a0; color: var(--fg); padding: 1px 2px; border-radius: 2
               background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
               padding: 6px 10px; font-size: 0.78rem; color: var(--fg-dim);
               font-family: -apple-system, sans-serif; pointer-events: none; }
-""" + prd_views.PRD_CSS + research_views.RESEARCH_CSS
+"""
 
 FAVICON = (
     "data:image/svg+xml,"
@@ -354,19 +350,13 @@ class HyperresearchHandler(BaseHTTPRequestHandler):
             self.__class__._db.row_factory = sqlite3.Row
         return self.__class__._db
 
-    def _prd_records(self):
-        return prd_scanner.scan_prds(self.__class__.vault.root)
-
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         query = urllib.parse.parse_qs(parsed.query)
 
         if path == "/" or path == "":
-            self._serve_home()
-        elif path == "/notes":
-            show_stubs = bool(query.get("show_stubs", ["0"])[0] in ("1", "true", "yes"))
-            self._serve_index(show_stubs=show_stubs)
+            self._serve_index()
         elif path.startswith("/note/"):
             note_id = urllib.parse.unquote(path[6:])
             self._serve_note(note_id)
@@ -382,18 +372,6 @@ class HyperresearchHandler(BaseHTTPRequestHandler):
             self._serve_graph()
         elif path == "/api/graph":
             self._serve_graph_api()
-        elif path == "/features":
-            self._serve_features()
-        elif path.startswith("/feature/"):
-            tag = urllib.parse.unquote(path[len("/feature/"):])
-            self._serve_feature(tag)
-        elif path == "/prds":
-            self._serve_prds()
-        elif path.startswith("/prd/"):
-            tag = urllib.parse.unquote(path[len("/prd/"):])
-            self._serve_prd(tag)
-        elif path == "/api/features":
-            self._serve_features_api()
         else:
             self._send(404, "<h1>Not Found</h1>")
 
@@ -427,28 +405,15 @@ class HyperresearchHandler(BaseHTTPRequestHandler):
             '<form action="/search"><div class="search-box">'
             '<input type="text" name="q" placeholder="Search..."></div></form>',
             '<a href="/">Home</a>',
-            '<a href="/features">Features</a>',
-            '<a href="/prds">PRDs</a>',
-            '<a href="/notes">All notes</a>',
             '<a href="/tags">Tags</a>',
             '<h3>Recent</h3>',
         ]
         rows = self.db.execute(
-            "SELECT id, title, type, COALESCE(summary,'') AS summary FROM notes "
-            "WHERE type NOT IN ('index') "
+            "SELECT id, title FROM notes WHERE type NOT IN ('index') "
             "ORDER BY COALESCE(updated, created) DESC LIMIT 15"
         ).fetchall()
         for r in rows:
-            if research_views.is_stub_note(r["summary"]):
-                continue
-            pretty = research_views.clean_title(r["title"] or "")
-            tag = "F" if (r["id"] or "").startswith("final_report_") or pretty.lower().startswith("final report") else ("I" if r["type"] == "interim" else "N")
-            tag_style = "color:#c4956a" if tag == "F" else ("color:#d4b896" if tag == "I" else "color:#7a6b57")
-            badge = f'<span style="{tag_style};font-size:0.66rem;margin-right:5px">[{tag}]</span>'
-            lines.append(
-                f'<a href="/note/{html_mod.escape(r["id"])}" title="{html_mod.escape(pretty)}">'
-                f'{badge}{html_mod.escape(pretty)}</a>'
-            )
+            lines.append(f'<a href="/note/{html_mod.escape(r["id"])}">{html_mod.escape(r["title"])}</a>')
         lines.append('</div>')
         lines.append(
             '<div class="nav-bottom">'
@@ -464,37 +429,17 @@ class HyperresearchHandler(BaseHTTPRequestHandler):
         )
         return "\n".join(lines)
 
-    def _serve_index(self, show_stubs: bool = False):
+    def _serve_index(self):
         rows = self.db.execute(
-            "SELECT id, title, type, status, COALESCE(summary,'') AS summary, "
-            "word_count FROM notes WHERE type NOT IN ('index') "
-            "ORDER BY COALESCE(updated, created) DESC"
+            "SELECT id, title, status, summary, word_count FROM notes "
+            "WHERE type NOT IN ('index') ORDER BY title"
         ).fetchall()
-        tag_rows = self.db.execute(
-            "SELECT note_id, tag FROM tags ORDER BY tag"
-        ).fetchall()
-        tags_by_note: dict[str, list[str]] = {}
-        for tr in tag_rows:
-            tags_by_note.setdefault(tr["note_id"], []).append(tr["tag"])
-
-        note_rows = [
-            research_views.NoteRow(
-                id=r["id"],
-                raw_title=r["title"] or "",
-                type=r["type"] or "",
-                status=r["status"] or "",
-                summary=r["summary"] or "",
-                word_count=r["word_count"] or 0,
-                tags=tags_by_note.get(r["id"], []),
-            )
-            for r in rows
-        ]
-        body = research_views.render_grouped_index(
-            note_rows,
-            show_stubs=show_stubs,
-            total_count=len(note_rows),
-        )
-        self._send(200, body, "All notes")
+        body = "<h1>All Notes</h1>\n<ul>\n"
+        for r in rows:
+            summary = f' <span style="color:var(--fg-dim);font-size:0.85rem">-- {html_mod.escape(r["summary"] or "")}</span>' if r["summary"] else ""
+            body += f'<li><a href="/note/{html_mod.escape(r["id"])}">{html_mod.escape(r["title"])}</a>{summary}</li>\n'
+        body += "</ul>"
+        self._send(200, body, "Home")
 
     def _serve_note(self, note_id: str):
         row = self.db.execute(
@@ -514,37 +459,22 @@ class HyperresearchHandler(BaseHTTPRequestHandler):
         ).fetchall()
 
         html_body = render_markdown(row["body"])
-        html_body = prd_views._inject_heading_anchors(html_body, row["body"])
-        toc_html = prd_views._build_toc(row["body"])
-
-        pretty_title = research_views.clean_title(row["title"] or "")
-        meta = research_views.render_note_meta_header(
-            title=pretty_title,
-            note_type=row["type"] or "",
-            status=row["status"] or "",
-            tags=tags,
-            word_count=row["word_count"] or 0,
+        tags_html = " ".join(f'<a href="/tag/{html_mod.escape(t)}" class="tag">{html_mod.escape(t)}</a>' for t in tags)
+        status_class = row["status"]
+        meta = (
+            f'<div class="meta">'
+            f'<span class="status {status_class}">{html_mod.escape(row["status"])}</span> '
+            f'{tags_html} '
+            f'<span>{row["word_count"]} words</span>'
+            f'</div>'
         )
-        title_block = f'<h1>{html_mod.escape(pretty_title)}</h1>' if pretty_title else ""
         bl_html = ""
         if backlinks:
             bl_items = "\n".join(
                 f'<li><a href="/note/{html_mod.escape(r["source_id"])}">{html_mod.escape(r["title"])}</a></li>' for r in backlinks
             )
             bl_html = f'<div class="backlinks"><h3>Backlinks</h3><ul>{bl_items}</ul></div>'
-
-        related_prds_html = ""
-        try:
-            related = prd_scanner.prds_for_research(self._prd_records(), note_id)
-            related_prds_html = prd_views.render_related_prds_panel(related)
-        except Exception:
-            related_prds_html = ""
-
-        self._send(
-            200,
-            f"{title_block}\n{meta}\n{toc_html}\n{html_body}\n{related_prds_html}\n{bl_html}",
-            html_mod.escape(pretty_title or row["title"]),
-        )
+        self._send(200, f"{meta}\n{html_body}\n{bl_html}", html_mod.escape(row["title"]))
 
     def _serve_tag(self, tag: str):
         rows = self.db.execute(
@@ -591,61 +521,6 @@ class HyperresearchHandler(BaseHTTPRequestHandler):
         body += "</div>"
         self._send(200, body, f"Search: {safe_q}")
 
-    def _serve_home(self):
-        records = self._prd_records()
-        if records:
-            groups = prd_scanner.feature_groups(records)
-            body = prd_views.render_features_index(groups)
-            self._send(200, body, "Home")
-            return
-        self._serve_index()
-
-    def _serve_features(self):
-        records = self._prd_records()
-        groups = prd_scanner.feature_groups(records)
-        body = prd_views.render_features_index(groups)
-        self._send(200, body, "Features")
-
-    def _serve_feature(self, prd_tag: str):
-        records = self._prd_records()
-        record = prd_scanner.find_prd(records, prd_tag)
-        if not record:
-            self._send(404, f"<h1>Feature not found: {html_mod.escape(prd_tag)}</h1>")
-            return
-        title, body = prd_views.render_feature_detail(record)
-        self._send(200, body, html_mod.escape(title))
-
-    def _serve_prds(self):
-        records = self._prd_records()
-        body = prd_views.render_prds_index(records)
-        self._send(200, body, "PRDs")
-
-    def _serve_prd(self, prd_tag: str):
-        records = self._prd_records()
-        record = prd_scanner.find_prd(records, prd_tag)
-        if not record:
-            self._send(404, f"<h1>PRD not found: {html_mod.escape(prd_tag)}</h1>")
-            return
-        title, body = prd_views.render_prd_detail(record)
-        self._send(200, body, html_mod.escape(title))
-
-    def _serve_features_api(self):
-        records = self._prd_records()
-        payload = [
-            {
-                "prd_tag": r.prd_tag,
-                "title": r.title,
-                "tier": r.tier,
-                "modality": r.modality,
-                "word_count": r.word_count,
-                "research_note_id": r.research_note_id,
-                "research_path": r.research_path,
-                "has_feature_request": r.feature_request is not None,
-            }
-            for r in records
-        ]
-        self._send_json({"features": payload, "count": len(payload)})
-
     def _serve_graph(self):
         body = (
             '<div class="graph-container graph-fullpage">'
@@ -682,7 +557,7 @@ class HyperresearchHandler(BaseHTTPRequestHandler):
         pass
 
 
-def run_server(vault, port: int = 9089, open_browser: bool = False):
+def run_server(vault, port: int = 8080, open_browser: bool = False):
     import signal
     import sys
 

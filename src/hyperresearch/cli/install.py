@@ -25,22 +25,6 @@ def install(
         "--steps-only",
         help="Install only the 16 step skills to <PATH>/.claude/skills/. Used internally by the entry skill bootstrap on first /hyperresearch invocation in a project. Not normally invoked by users.",
     ),
-    serve_after: bool = typer.Option(
-        False,
-        "--serve",
-        help="After install completes, automatically start the interactive UI server (binds 127.0.0.1:9089 and opens your browser). Foreground by default — Ctrl+C in the same terminal to stop. Pair with --detach to background it instead.",
-    ),
-    serve_detach: bool = typer.Option(
-        False,
-        "--detach",
-        "-d",
-        help="Run the auto-launched UI as a backgrounded process (writes pidfile + logfile under .hyperresearch/, returns your terminal immediately). Stop later with `hyperresearch serve-stop` or `kill $(cat .hyperresearch/serve.pid)`. Only meaningful with --serve.",
-    ),
-    serve_port: int = typer.Option(
-        9089,
-        "--serve-port",
-        help="Port the auto-launched UI binds to (only used with --serve).",
-    ),
 ) -> None:
     """Install hyperresearch: init vault + inject CLAUDE.md + install Claude Code hooks."""
     import sys
@@ -87,11 +71,6 @@ def install(
             f"[green]PRD extension:[/] {len(prd_result['skills_installed'])} skills, "
             f"{len(prd_result['agents_installed'])} agents installed at {target}/.claude/"
         )
-        if serve_after:
-            console.print(
-                "[dim]--serve ignored for --steps-only (no vault context). "
-                "Run `hyperresearch serve` from the project root after install.[/]"
-            )
         return
 
     # Global install path: only the user-level Claude Code entry skill +
@@ -145,11 +124,6 @@ def install(
             "and the 16 step skills are created in that project's .claude/. "
             "PRD step skills + agents are installed globally and ready to use immediately.[/]"
         )
-        if serve_after:
-            console.print(
-                "[dim]--serve ignored for --global (no vault context). "
-                "Run `hyperresearch serve` inside a project that has the vault initialized.[/]"
-            )
         return
 
     root = Path(path).resolve()
@@ -248,85 +222,6 @@ def install(
             "a feature request + that research into a PRD.[/]"
         )
         console.print("[dim]Tip: Run 'hyperresearch setup' for interactive configuration (profile, stealth, etc.)[/]")
-        if not serve_after:
-            console.print(
-                f"[dim]UI tip: pass --serve next time to auto-launch the browser, or run "
-                f"`hyperresearch serve --open` (port {serve_port}) now.[/]"
-            )
-
-    if serve_after:
-        vault.auto_sync()
-        if serve_detach:
-            _launch_detached_server(vault.root, serve_port)
-        else:
-            console.print(
-                f"\n[bold]Starting UI:[/] http://127.0.0.1:{serve_port} "
-                "[dim](foreground; press Ctrl+C in this terminal to stop)[/]"
-            )
-            from hyperresearch.serve.server import run_server
-            run_server(vault, port=serve_port, open_browser=True)
-
-
-def _launch_detached_server(vault_root: Path, port: int) -> None:
-    """Spawn the UI server as a backgrounded child, write pid+log, return.
-
-    POSIX: ``start_new_session=True`` decouples the child from the parent's
-    controlling terminal so the install command exits immediately and the
-    server survives terminal close.
-
-    Windows: ``DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP`` produces the
-    equivalent decoupling.
-    """
-    import os
-    import subprocess
-    import sys
-    import webbrowser
-
-    state_dir = vault_root / ".hyperresearch"
-    state_dir.mkdir(parents=True, exist_ok=True)
-    pid_path = state_dir / "serve.pid"
-    log_path = state_dir / "serve.log"
-
-    cmd = [
-        sys.executable,
-        "-m",
-        "hyperresearch",
-        "serve",
-        "--port",
-        str(port),
-    ]
-
-    popen_kwargs: dict = {
-        "cwd": str(vault_root),
-        "stdout": open(log_path, "ab", buffering=0),
-        "stderr": subprocess.STDOUT,
-        "stdin": subprocess.DEVNULL,
-        "close_fds": True,
-    }
-    if os.name == "nt":
-        popen_kwargs["creationflags"] = (
-            getattr(subprocess, "DETACHED_PROCESS", 0)
-            | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-        )
-    else:
-        popen_kwargs["start_new_session"] = True
-
-    proc = subprocess.Popen(cmd, **popen_kwargs)
-    pid_path.write_text(str(proc.pid))
-
-    url = f"http://127.0.0.1:{port}"
-    try:
-        webbrowser.open(url)
-    except Exception:
-        pass
-
-    console.print(
-        f"\n[bold]UI running in background:[/] {url}\n"
-        f"  pid: {proc.pid}  (file: {pid_path})\n"
-        f"  log: {log_path}\n"
-        f"  stop: [cyan]hyperresearch serve-stop[/] "
-        f"[dim]or `kill {proc.pid}`[/]"
-    )
 
 
 def _setup_crawl4ai(vault) -> str:

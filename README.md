@@ -33,36 +33,14 @@ pip install git+https://github.com/ShivamPansuriya/hyperresearch.git@prd-extensi
 
 That single line installs the package from this fork's `prd-extension` branch and registers all skills + subagents globally. After it finishes, `/hyperresearch` and `/hyperresearch-prd` are available in every Claude Code session.
 
-Per-project install (cleaner system-reminder footprint, **auto-launches the UI in the background**):
+Per-project install (cleaner system-reminder footprint):
 
 ```bash
 cd your-project
-pip install git+https://github.com/ShivamPansuriya/hyperresearch.git@prd-extension && hyperresearch install --serve --detach
-```
-
-What this does:
-
-- Installs the package and registers all skills + subagents.
-- Starts the interactive UI on `http://127.0.0.1:9089` as a **backgrounded process** (terminal returns to your prompt immediately).
-- Opens your browser to the Features page.
-- Writes the server PID to `.hyperresearch/serve.pid` and logs to `.hyperresearch/serve.log` inside the project.
-- Stop it any time with `hyperresearch serve-stop` (or `kill $(cat .hyperresearch/serve.pid)`).
-
-Foreground variant (UI runs in the same terminal, Ctrl+C to stop, terminal stays "locked" until you do):
-
-```bash
-pip install git+https://github.com/ShivamPansuriya/hyperresearch.git@prd-extension && hyperresearch install --serve
-```
-
-Plain install with no UI (start it later with `hyperresearch serve --open`):
-
-```bash
 pip install git+https://github.com/ShivamPansuriya/hyperresearch.git@prd-extension && hyperresearch install
 ```
 
 Then `/hyperresearch <anything>` and `/hyperresearch-prd <feature request>` in Claude Code.
-
-> Note: `--serve` / `--detach` only apply to per-project install. They do not apply to `--global` (no vault context) or `--steps-only` (used internally by the slash-command bootstrap). Start the UI manually from your project root in those cases: `hyperresearch serve --open`.
 
 ### Upstream-only install (research pipeline without the PRD extension)
 
@@ -188,27 +166,6 @@ Step 19 detects PMG-relevant Claude Code skills (`impeccable`, `frontend-design`
 - [`docs/PRD_ARCHITECTURE.md`](docs/PRD_ARCHITECTURE.md) — internals, extension points, design rationale
 - [`docs/PRD_PER_STEP_INVOCATION.md`](docs/PRD_PER_STEP_INVOCATION.md) — recovery contract per step, manual rerun scenarios
 - [`evals/`](evals/) — 3 iterations of adversarial eval that drove findings from 15 → 8 → 3 (zero HIGH after iteration 3)
-
----
-
-## Interactive UI — fork-only
-
-Markdown notes are great for archival, terrible for navigation. The fork ships a built-in browser-based UI that **cross-links research and PRDs by feature**, so a finished feature reads as one coherent thing instead of two parallel directories.
-
-```bash
-hyperresearch serve --port 9089 --open
-```
-
-What's in it:
-
-- **Features view** (`/features`) — every PRD shown as a card with feature-request snippet, tier badge, and one-click links to its research note and full PRD. This is the new home page when PRDs exist.
-- **Feature detail** (`/feature/<prd_tag>`) — the canonical feature page: feature request at the top, cross-links to research and the full PRD page, then the PRD rendered inline with a sticky table of contents.
-- **Linked PRDs panel** — when viewing a research note that drove one or more PRDs, a sidebar lists them so you can jump from research → PRD without leaving the page.
-- **PRD index** (`/prds`) — flat newest-first list of all PRDs with tier / modality / word count.
-- **Existing surfaces preserved** — All Notes (`/notes`), Tags, full-text search, force-directed Graph all still work.
-- **JSON API** — `/api/features` and `/api/graph` return structured data for tooling.
-
-Cross-links are computed from the `research_final_report_path` frontmatter field that the PRD pipeline writes into every PRD — no extra metadata maintenance, no database migration. The UI is stdlib-only (no extra deps) and runs locally on `127.0.0.1`.
 
 ---
 

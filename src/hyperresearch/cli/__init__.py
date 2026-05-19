@@ -71,7 +71,6 @@ from hyperresearch.cli.repair import repair as _repair
 from hyperresearch.cli.research import research as _research
 from hyperresearch.cli.search import search as _search
 from hyperresearch.cli.serve import serve as _serve
-from hyperresearch.cli.serve import serve_stop as _serve_stop
 from hyperresearch.cli.tag import tag_list as _tags
 from hyperresearch.cli.vault_tag import vault_tag as _vault_tag
 from hyperresearch.cli.watch import watch as _watch
@@ -100,7 +99,6 @@ app.command("import")(_import)
 app.command("repair")(_repair)
 app.command("watch")(_watch)
 app.command("serve")(_serve)
-app.command("serve-stop", help="Stop a backgrounded UI server (started with `install --serve --detach`).")(_serve_stop)
 app.command("mcp")(_mcp)
 
 # Sub-apps
