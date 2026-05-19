@@ -2571,7 +2571,7 @@ description: >
   secondary sources cite. Runs on Sonnet for better comprehension and
   judgment. Spawn multiple in parallel for bulk research.
 model: sonnet
-tools: Bash, Read, Write, WebSearch
+tools: Bash, Read, Write, WebSearch, mcp__exa__web_search_exa, mcp__exa__web_search_advanced_exa, mcp__exa__deep_search_exa, mcp__exa__get_code_context_exa, mcp__exa__crawling_exa
 color: blue
 ---
 
@@ -2651,6 +2651,234 @@ PYTHONIOENCODING=utf-8 {hpr_path} fetch "<url>" \\
 
 If you're fetching a seed source directly from the parent agent's URL list
 (not discovered by you), omit the flag.
+
+## Search tool selection
+
+You have multiple search and fetch surfaces. They are NOT interchangeable.
+Pick the right one for the job, in this priority order.
+
+### 1. Academic APIs FIRST (research-literature topics only)
+
+For any topic with a research literature (CS, ML, biology, physics, economics,
+medicine, finance), hit academic APIs BEFORE general web search. They return
+citation-ranked canonical papers; general web search returns derivative
+commentary. Use plain `Bash` + `curl`:
+
+```bash
+curl -s "https://api.semanticscholar.org/graph/v1/paper/search?query=<urlencoded-q>&fields=title,year,citationCount,externalIds&limit=10"
+curl -s "https://export.arxiv.org/api/query?search_query=cat:cs.LG+AND+all:<urlencoded-q>&sortBy=relevance&max_results=25"
+curl -s "https://api.openalex.org/works?search=<urlencoded-q>&sort=cited_by_count:desc&per-page=15&mailto=research@example.com"
+curl -s "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=<urlencoded-q>&retmode=json&retmax=20"
+```
+
+Pick paper IDs / URLs from the response, then fetch the actual PDF or
+landing page via `{hpr_path} fetch`. Academic APIs do NOT persist content
+into the vault — only `{hpr_path} fetch` does.
+
+### 2. Exa MCP tools (general web — preferred over `WebSearch` when available)
+
+Exa is a neural search engine. Query style: **describe the IDEAL PAGE in
+natural language**, not keywords. GOOD: `"blog post comparing React Server
+Components and Next.js App Router performance"`. BAD: `"react vs next.js"`.
+
+If the Exa tools return "not available" or "missing API key", silently fall
+through to plain `WebSearch`. Do not stop work; just degrade.
+
+Pick the Exa tool by the kind of search:
+
+#### `mcp__exa__web_search_exa` — DEFAULT general discovery
+
+Use this as your standard discovery tool. Best for: open-ended discovery,
+"what's been written about X recently", "find blog posts comparing Y and Z".
+
+```
+mcp__exa__web_search_exa(
+  query: "<noun-phrase describing the ideal page>",
+  numResults: 8
+)
+```
+
+Use `numResults: 5-10` for discovery, `numResults: 3` for narrow lookups.
+
+#### `mcp__exa__web_search_advanced_exa` — when you need FILTERS
+
+Use this whenever you need any of: date range, domain include/exclude,
+category targeting, must-have / must-not-have text, highlights, or subpage
+crawl. Replaces `WebSearch` entirely when precision matters.
+
+Key parameters worth knowing:
+
+- `category` — one of `company | research paper | news | pdf | github | personal site | people | financial report`. Use AGGRESSIVELY.
+- `includeDomains` / `excludeDomains` — restrict to specific sites, e.g. `["arxiv.org", "nature.com"]`.
+- `startPublishedDate` / `endPublishedDate` — for recency-pinned queries (Q3 2024, "since 2023"). ISO 8601 dates.
+- `includeText` / `excludeText` — must-have / must-not-have substrings.
+- `enableHighlights: true`, `enableSummary: true` — extract relevant passages without separately reading the page.
+
+Examples:
+
+```
+# Recent research papers on a topic
+mcp__exa__web_search_advanced_exa(
+  query: "selective state space model architecture",
+  category: "research paper",
+  startPublishedDate: "2023-01-01",
+  numResults: 15
+)
+
+# Recent industry news from specific outlets
+mcp__exa__web_search_advanced_exa(
+  query: "EV battery price decline trajectory",
+  category: "news",
+  includeDomains: ["reuters.com", "bloomberg.com", "ft.com"],
+  startPublishedDate: "2024-01-01",
+  enableHighlights: true
+)
+
+# Company background + recent moves
+mcp__exa__web_search_advanced_exa(
+  query: "Anthropic AI safety team research output",
+  category: "company",
+  numResults: 5
+)
+
+# A specific named person or expert
+mcp__exa__web_search_advanced_exa(
+  query: "Andrej Karpathy on LLM training data quality",
+  category: "people",
+  numResults: 5
+)
+
+# Historical financial filing for a specific period
+mcp__exa__web_search_advanced_exa(
+  query: "Tesla Q3 2024 10-Q segment revenue gross margin",
+  category: "financial report",
+  startPublishedDate: "2024-09-01",
+  endPublishedDate: "2024-12-31"
+)
+```
+
+#### `mcp__exa__deep_search_exa` — multi-angle synthesis, SPARINGLY
+
+Takes 4-50 seconds. Generates multiple query variations and synthesizes a
+short answer with citations. Use ONLY for high-stakes specific questions
+where the multi-angle aggregation adds value the regular discovery layer
+cannot. Do NOT use as a default — it's slow and the synthesis duplicates
+the orchestrator's job.
+
+GOOD use cases:
+- ONE very specific factual question that needs a confident cited answer
+  (e.g. "What was the exact growth rate of the Indian higher-ed market
+  2020-2025?")
+- Aggregating expert disagreement on a single dispute
+  (e.g. "What do experts disagree about regarding ABHA adoption velocity?")
+
+BAD use cases:
+- General discovery — use `web_search_exa` (much faster).
+- Broad topical sweeps — use `web_search_advanced_exa` with filters.
+
+```
+mcp__exa__deep_search_exa(
+  objective: "What is the documented adoption rate of ABHA digital health IDs across Indian states as of 2025?",
+  type: "deep",
+  numResults: 8
+)
+```
+
+Use `type: "deep-reasoning"` only when the question needs multi-step
+reasoning (rare). Default `type: "deep"` is fine.
+
+#### `mcp__exa__get_code_context_exa` — code / API / framework questions
+
+Use for questions where code examples or API references are the answer.
+Tuned to find GitHub, Stack Overflow, official documentation. Do NOT use
+for general topics.
+
+```
+mcp__exa__get_code_context_exa(
+  query: "Mamba selective state space layer implementation PyTorch",
+  numResults: 8
+)
+```
+
+#### `mcp__exa__crawling_exa` — known-URL fallback ONLY
+
+Use ONLY when you have a known URL AND `{hpr_path} fetch` returned a login
+wall, empty content, or a 4xx/5xx. Exa's crawler is independent — sometimes
+it succeeds where crawl4ai fails.
+
+```
+mcp__exa__crawling_exa(
+  urls: ["https://hard-to-fetch.example.com/article"],
+  maxCharacters: 8000
+)
+```
+
+**IMPORTANT:** Output from `crawling_exa` does NOT enter the vault.
+After you receive the markdown content, you MUST persist it. Two paths:
+
+1. **Re-attempt vault fetch** with `--force`:
+   ```bash
+   PYTHONIOENCODING=utf-8 {hpr_path} fetch "<url>" --tag <topic> --force -j
+   ```
+2. **If `fetch` still fails**, paste the load-bearing 1-2 paragraphs into
+   your report to the parent agent, AND note the URL as un-vault-able so
+   the orchestrator can flag it in `polish-log.json`.
+
+Search results that don't enter the vault are invisible to the next
+pipeline step.
+
+#### NOT USED: `mcp__exa__deep_researcher_start` / `mcp__exa__deep_researcher_check`
+
+Do not invoke Exa's deep-researcher. THIS pipeline IS the deep researcher;
+calling Exa's would double-spend and produce a synthesized report that
+conflicts with the orchestrator's own synthesis. If you find yourself
+wanting one, you almost certainly want `deep_search_exa` or
+`web_search_advanced_exa` instead.
+
+#### NOT USED: `mcp__exa__company_research_exa` / `mcp__exa__people_search_exa`
+
+These are convenience wrappers around `web_search_advanced_exa` with the
+`category` parameter pre-set. Use `web_search_advanced_exa` with
+`category: "company"` or `category: "people"` instead — same result, more
+control.
+
+### 3. `WebSearch` — fallback when Exa is unavailable
+
+Use the built-in `WebSearch` tool ONLY if:
+
+- The Exa MCP server returns "tool not available" or "missing API key", OR
+- You need a quick low-stakes fact-check and Exa is overkill.
+
+When Exa is configured, prefer it over `WebSearch` for everything except
+the simplest lookups — Exa's neural results are higher signal per request.
+
+### 4. `{hpr_path} fetch <url>` — THE PERSISTENCE PATH
+
+ALL search results need to enter the vault before they count. After ANY
+of the search tools above returns a URL you want, fetch it with:
+
+```bash
+PYTHONIOENCODING=utf-8 {hpr_path} fetch "<url>" --tag <topic> -j
+```
+
+Search → fetch → ingest is the contract. A URL surfaced by Exa but never
+fetched is invisible to the next pipeline step.
+
+### Quick decision table
+
+| Situation                                                          | Tool                                                                              |
+|--------------------------------------------------------------------|-----------------------------------------------------------------------------------|
+| Academic / scientific topic with research literature               | Academic APIs FIRST, then `web_search_advanced_exa(category: "research paper")`   |
+| Discovery on a general topic (news, blogs, industry, culture)      | `mcp__exa__web_search_exa`                                                        |
+| Need date filter, domain whitelist, or category restriction        | `mcp__exa__web_search_advanced_exa`                                               |
+| Company background or recent moves                                 | `mcp__exa__web_search_advanced_exa(category: "company")`                          |
+| Specific named person or expert                                    | `mcp__exa__web_search_advanced_exa(category: "people")`                           |
+| Government filing / financial report for a specific period         | `mcp__exa__web_search_advanced_exa(category: "financial report" or "pdf")`        |
+| One specific factual question, need cited synthesized answer       | `mcp__exa__deep_search_exa` (sparingly)                                           |
+| Code / API / library example                                       | `mcp__exa__get_code_context_exa`                                                  |
+| Known URL, `{hpr_path} fetch` already failed                       | `mcp__exa__crawling_exa`, then persist via `{hpr_path} fetch --force`             |
+| Quick fact-check, Exa overkill                                     | `WebSearch`                                                                       |
+| URL in hand, ready to ingest into vault                            | `{hpr_path} fetch "<url>"`                                                        |
 
 ## Phase 1: Fetch assigned URLs
 
@@ -2754,8 +2982,11 @@ those primaries gives the pipeline higher-authority sources to cite.
      PYTHONIOENCODING=utf-8 {hpr_path} sources check "<url>" -j
      PYTHONIOENCODING=utf-8 {hpr_path} fetch "<url>" --tag <topic> --suggested-by <note-id-that-cited-it> --suggested-by-reason "cited as primary source" -j
      ```
-   - If you only have author + title (no URL), use WebSearch to locate it:
-     search for `"<author> <title> <year>"` or `"<title> filetype:pdf"`
+   - If you only have author + title (no URL), locate the paper. Preferred:
+     `mcp__exa__web_search_advanced_exa(query: "<title> <author> <year>", category: "research paper", numResults: 5)`
+     or `category: "pdf"` if you specifically want a PDF.
+     Fall back to plain `WebSearch` with `"<author> <title> <year>"` or
+     `"<title> filetype:pdf"` only if the Exa MCP isn't available.
    - For academic papers: try these URL patterns directly:
      - arXiv: `https://arxiv.org/abs/<id>` or search arXiv
      - DOI: `https://doi.org/<doi>` — fetch the DOI URL directly
@@ -2805,7 +3036,7 @@ description: >
   high-leverage missing sources. Runs on Sonnet. Spawn ONCE before
   drafting, after Layer 3.5 comparisons.
 model: sonnet
-tools: Bash, Read, Write
+tools: Bash, Read, Write, WebSearch, mcp__exa__web_search_exa, mcp__exa__web_search_advanced_exa, mcp__exa__deep_search_exa
 color: teal
 ---
 
@@ -2872,14 +3103,74 @@ to drafting.
    PYTHONIOENCODING=utf-8 {hpr_path} search "<adversarial query>" --tag <corpus_tag> -j
    ```
 
-6. **Produce output** at `output_path`:
+6. **Verify each candidate gap with one external probe.** Before writing
+   a gap to the output, run ONE targeted external search to confirm the
+   gap is real — your hypothesis is "this overturning source does not
+   exist in our corpus and probably exists on the open web." Picking the
+   right Exa mode by gap type:
+
+   - For a **research-paper / academic gap**:
+     ```
+     mcp__exa__web_search_advanced_exa(
+       query: "<noun-phrase describing the ideal overturning paper>",
+       category: "research paper",
+       startPublishedDate: "<last-N-years if recency matters>",
+       numResults: 5
+     )
+     ```
+
+   - For a **government / industry-report gap**:
+     ```
+     mcp__exa__web_search_advanced_exa(
+       query: "<noun-phrase>",
+       category: "pdf",
+       includeDomains: ["<authority sites if known>"],
+       numResults: 5
+     )
+     ```
+
+   - For a **news / event / timeline gap**:
+     ```
+     mcp__exa__web_search_advanced_exa(
+       query: "<noun-phrase>",
+       category: "news",
+       startPublishedDate: "<relevant date>",
+       numResults: 5
+     )
+     ```
+
+   - For a **synthesized verification** (does the consensus you flagged
+     actually have a dissenting view?), use sparingly:
+     ```
+     mcp__exa__deep_search_exa(
+       objective: "Is there documented dissent on <claim>? Cite contrary views.",
+       type: "deep",
+       numResults: 6
+     )
+     ```
+
+   If the external probe TURNS UP the source you thought was missing,
+   it is NOT a gap — the orchestrator should fetch it via step 13's
+   gap-fetch wave, not invent another locus to chase. Note the URL(s)
+   directly in the gap entry's `external_probe_hits` field below.
+
+   If the external probe returns NOTHING relevant, the gap is real and
+   confirmed-missing — flag it confidently.
+
+   If the Exa MCP server is unavailable (returns "tool not available"
+   or "missing API key"), fall back to plain `WebSearch` for the probe.
+   Don't skip the probe.
+
+7. **Produce output** at `output_path`:
    ```json
    {{
      "gaps": [
        {{
          "type": "overturning|strengthening|independent-verification",
          "target_position": "which claim/position this source would test",
-         "search_queries": ["2-3 specific search queries to find this source"],
+         "search_queries": ["2-3 specific search queries — natural-language describing the ideal page; the gap-fetch step in step 13 will feed these into mcp__exa__web_search_advanced_exa"],
+         "preferred_exa_category": "research paper|news|pdf|company|people|financial report|none",
+         "external_probe_hits": ["URLs Exa returned during step 6 verification, if any — these should be fetched in step 13 before going wider"],
          "source_type": "academic|government|industry|investigative",
          "priority": "critical|high|medium",
          "rationale": "why finding this source matters for the draft"

@@ -241,6 +241,30 @@ For any topic with a research literature, hit academic APIs BEFORE web search. T
 
 After the academic sweep, run web searches for context, news, non-academic angles, and at least one adversarial search ("criticism of X", "limitations of X").
 
+### Exa MCP (optional, enriches web search)
+
+The fetcher and corpus-critic agents support the [Exa MCP server](https://exa.ai) — a neural search engine that returns higher-signal results than keyword search. When configured, agents prefer Exa over the built-in `WebSearch` and pick the right Exa mode by query type:
+
+- `mcp__exa__web_search_exa` — default discovery (describe the ideal page in natural language).
+- `mcp__exa__web_search_advanced_exa` — filtered search: date ranges, domain include/exclude, categories (`research paper`, `news`, `pdf`, `company`, `people`, `financial report`, `github`, `personal site`).
+- `mcp__exa__deep_search_exa` — multi-angle synthesized answer with citations (used sparingly, ~5-50s).
+- `mcp__exa__get_code_context_exa` — code / API / library examples from GitHub, Stack Overflow, docs.
+- `mcp__exa__crawling_exa` — extract full markdown from a known URL when `hyperresearch fetch` is blocked.
+
+The corpus-critic uses Exa to verify each candidate gap before flagging it (so the gap-fetch wave in step 13 doesn't hunt for sources that already exist or genuinely don't exist).
+
+Setup: add to `~/.claude.json`:
+
+```json
+"exa-web-search": {
+  "command": "npx",
+  "args": ["-y", "exa-mcp-server"],
+  "env": { "EXA_API_KEY": "YOUR_EXA_API_KEY_HERE" }
+}
+```
+
+If Exa isn't configured, agents silently fall back to `WebSearch` + the academic APIs — the pipeline still works, just with lower discovery signal.
+
 ---
 
 ## What it doesn't do
