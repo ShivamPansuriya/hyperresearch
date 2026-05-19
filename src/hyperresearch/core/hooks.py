@@ -3431,6 +3431,8 @@ _HYPERRESEARCH_STEP_SKILLS = [
     "hyperresearch-14-patcher",
     "hyperresearch-15-polish",
     "hyperresearch-16-readability-audit",
+    "hyperresearch-17-author-diagrams",
+    "hyperresearch-18-render-html",
 ]
 
 

@@ -32,6 +32,8 @@ PRD_STEP_SKILLS: list[str] = [
     "hyperresearch-prd-26-patcher",
     "hyperresearch-prd-27-polish",
     "hyperresearch-prd-28-readability-audit",
+    "hyperresearch-prd-29-author-diagrams",
+    "hyperresearch-prd-30-render-html",
 ]
 
 # Subagents that the step skills spawn. Each lives in

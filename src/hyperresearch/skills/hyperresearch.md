@@ -1,13 +1,15 @@
 ---
 name: hyperresearch
 description: >
-  Deep research via the HYPERRESEARCH V8 architecture — a tier-adaptive 16-step
+  Deep research via the HYPERRESEARCH V8 architecture — a tier-adaptive 18-step
   pipeline (light / full) that scales from a ~30-minute light-tier answer to
-  a 1.5–2.5 hour adversarially-audited report. This entry skill is a ROUTER.
-  It does not contain step procedures — it tells you which Skill to invoke
-  for each step, in order. Each step's instructions live in its own skill
-  file (`hyperresearch-1-decompose` through `hyperresearch-16-readability-audit`)
-  and are loaded fresh into context when you invoke them.
+  a 1.5–2.5 hour adversarially-audited report. Steps 1–16 produce the markdown
+  report; steps 17–18 add Mermaid diagrams and render a self-contained HTML
+  page as the final deliverable. This entry skill is a ROUTER. It does not
+  contain step procedures — it tells you which Skill to invoke for each step,
+  in order. Each step's instructions live in its own skill file
+  (`hyperresearch-1-decompose` through `hyperresearch-18-render-html`) and are
+  loaded fresh into context when you invoke them.
 ---
 
 # Hyperresearch V8 — multi-skill chain orchestrator
@@ -34,7 +36,7 @@ When you invoke a Skill, that skill's full procedure is loaded into your context
 
 **Why this design?** Context compaction. V7 was one 1200-line skill that got compacted away by the time Layer 4 needed its triple-draft procedure. The orchestrator forgot the procedure, wrote a single draft, and produced a flat-scoring report. V8 fixes this at the source: each step's procedure is loaded into context **only at the moment it's needed**, fresh, with no eviction risk.
 
-**The 16 step skills** (all prefixed `hyperresearch-`):
+**The 18 step skills** (all prefixed `hyperresearch-`):
 
 | # | Skill name | What it does | Tiers |
 |---|---|---|---|
@@ -54,6 +56,8 @@ When you invoke a Skill, that skill's full procedure is loaded into your context
 | 14 | `hyperresearch-14-patcher` | Surgical Edit hunks applied to draft | full |
 | 15 | `hyperresearch-15-polish` | Hygiene + filler pass (Edit-based subagent) | all |
 | 16 | `hyperresearch-16-readability-audit` | Readability recommender writes JSON suggestions; orchestrator selectively applies via Edit | all |
+| 17 | `hyperresearch-17-author-diagrams` | Insert Mermaid diagrams (hypothesis tree, source-tension graph, architecture, comparison, decision tree) into the final report | all |
+| 18 | `hyperresearch-18-render-html` | Render the diagram-enriched markdown to a self-contained HTML file (baoyu skill if available, Python fallback otherwise) | all |
 
 ---
 
@@ -63,8 +67,10 @@ Step 1 classifies the query into a `pipeline_tier` (`light` / `full`). The tier 
 
 | Tier | Steps that run | Typical cost | Typical time |
 |------|---|---|---|
-| `light` | 1 → 2 → 10 (single draft) → 15 → 16 | ~$5–15 | ~30–40 min |
-| `full` | 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12 → 13 → 14 → 15 → 16 | ~$60–120 | ~1.5–2.5 hours |
+| `light` | 1 → 2 → 10 (single draft) → 15 → 16 → 17 → 18 | ~$5–15 | ~30–40 min |
+| `full` | 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12 → 13 → 14 → 15 → 16 → 17 → 18 | ~$60–120 | ~1.5–2.5 hours |
+
+Steps 17 and 18 run for BOTH tiers — the HTML page (with Mermaid diagrams rendered as SVG) is the user-facing deliverable.
 
 **RESPECT THE TIER GATE.** When step 1 classifies a query as `light`, do NOT run the skipped steps "just to be thorough." The tier classification is a product decision: simple queries should produce fast, right-sized answers. Trust the classification. If you're uncertain, tier up — but never silently upgrade every query to `full`.
 
@@ -115,10 +121,10 @@ Before you invoke any step skill, do this:
    - Tier rationale (filled in after step 1)
    - Wrapper requirements (save path, citation format, terminal sections)
 
-6. **Seed the TodoWrite list.** Create todos for all 16 step skill invocations using the integer step numbers, e.g.:
+6. **Seed the TodoWrite list.** Create todos for all 18 step skill invocations using the integer step numbers, e.g.:
    - `Step 1 — Skill: hyperresearch-1-decompose`
    - `Step 2 — Skill: hyperresearch-2-width-sweep`
-   - ... (through Step 16)
+   - ... (through Step 18)
 
    The todo list survives context compaction; it's your durable memory of where you are in the chain.
 
@@ -176,6 +182,8 @@ Context compaction may eat parts of this conversation. If you're unsure what ste
    - Step 14: `research/patch-log.json` (and edited final_report.md)
    - Step 15: `research/polish-log.json` (and edited final_report.md)
    - Step 16: `research/readability-recommendations.json`, `research/readability-decisions.json` (and edited final_report.md)
+   - Step 17: `research/diagram-log.json` (and the final report file now contains Mermaid blocks)
+   - Step 18: `research/notes/final_report_<vault_tag>.html`, `research/html-render-log.json`
 3. **Find the highest-numbered step whose artifact exists.** Resume from the next step.
 4. **Re-invoke this entry skill** if you've lost track entirely: `Skill(skill: "hyperresearch")`. It loads fresh.
 
@@ -183,9 +191,9 @@ If you're ever uncertain what to do next, the answer is: re-read this file and f
 
 ---
 
-## Final integrity gate (after step 16)
+## Final integrity gate (after step 18)
 
-Once step 16 returns, run the integrity check:
+Once step 18 returns, run the integrity check:
 
 ```bash
 for f in research/critic-findings-dialectic.json \
@@ -208,7 +216,9 @@ $HPR lint --rule scaffold-prompt --json
 $HPR lint --rule patch-surgery --json
 ```
 
-If any rule returns `error` severity issues, address them before declaring complete. Then ship: the final report lives at `research/notes/final_report_<vault_tag>.md`.
+If any rule returns `error` severity issues, address them before declaring complete. Then ship:
+- Markdown source of truth: `research/notes/final_report_<vault_tag>.md`
+- **HTML deliverable the user opens: `research/notes/final_report_<vault_tag>.html`**
 
 ---
 

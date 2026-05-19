@@ -2,14 +2,16 @@
 name: hyperresearch-prd
 description: >
   PRD generation via the HYPERRESEARCH-PRD architecture — a tier-adaptive
-  12-step pipeline (light / full) that turns a feature request plus a
+  14-step pipeline (light / full) that turns a feature request plus a
   completed hyperresearch report into an adversarially-audited Product
-  Requirements Document. This entry skill is a ROUTER. It does not
-  contain step procedures — it tells you which Skill to invoke for each
-  step, in order. Each step's instructions live in its own skill file
+  Requirements Document. Steps 17–28 build the markdown PRD; steps 29–30
+  add Mermaid diagrams and render a self-contained HTML page as the final
+  deliverable. This entry skill is a ROUTER. It does not contain step
+  procedures — it tells you which Skill to invoke for each step, in order.
+  Each step's instructions live in its own skill file
   (`hyperresearch-prd-17-initialize` through
-  `hyperresearch-prd-28-readability-audit`) and are loaded fresh into
-  context when you invoke them.
+  `hyperresearch-prd-30-render-html`) and are loaded fresh into context
+  when you invoke them.
 ---
 
 # Hyperresearch-PRD — multi-skill chain orchestrator
@@ -39,7 +41,7 @@ When you invoke a Skill, that skill's full procedure is loaded into your context
 
 **Why this design?** Same reason as the parent hyperresearch pipeline: context compaction. Each step's procedure is loaded into context only at the moment it's needed.
 
-**The 12 step skills** (all prefixed `hyperresearch-prd-`):
+**The 14 step skills** (all prefixed `hyperresearch-prd-`):
 
 | #  | Skill name                                       | What it does                                                                                              | Tiers |
 |----|--------------------------------------------------|-----------------------------------------------------------------------------------------------------------|-------|
@@ -55,15 +57,19 @@ When you invoke a Skill, that skill's full procedure is loaded into your context
 | 26 | `hyperresearch-prd-26-patcher`                   | Surgical Edit hunks applied to draft (tool-locked Read+Edit)                                              | full  |
 | 27 | `hyperresearch-prd-27-polish`                    | Hygiene + filler pass (tool-locked Read+Edit subagent)                                                    | all   |
 | 28 | `hyperresearch-prd-28-readability-audit`         | Readability recommender writes JSON suggestions; orchestrator selectively applies                         | all   |
+| 29 | `hyperresearch-prd-29-author-diagrams`           | Insert Mermaid diagrams (persona map, user flow, scope boundary, integration touchpoints) into the PRD    | all   |
+| 30 | `hyperresearch-prd-30-render-html`               | Render the diagram-enriched PRD to a self-contained HTML file (baoyu skill if available, Python fallback) | all   |
 
 ## Tier routing
 
 Step 17 classifies the PRD into a `pipeline_tier` (`light` / `full`). The tier is written to `prd/prd-decomposition.json`. After step 17, **read that file** to learn the tier, then sequence steps according to:
 
-| Tier   | Steps that run                                              | Typical time |
-|--------|-------------------------------------------------------------|--------------|
-| `light` | 17 → 18 → 19 → 20 → 21 → 23 (single draft) → 27 → 28        | ~30–40 min   |
-| `full`  | 17 → 18 → 19 → 20 → 21 → 22 → 23 → 24 → 25 → 26 → 27 → 28   | ~1–2 hours   |
+| Tier   | Steps that run                                                              | Typical time |
+|--------|-----------------------------------------------------------------------------|--------------|
+| `light` | 17 → 18 → 19 → 20 → 21 → 23 (single draft) → 27 → 28 → 29 → 30              | ~30–40 min   |
+| `full`  | 17 → 18 → 19 → 20 → 21 → 22 → 23 → 24 → 25 → 26 → 27 → 28 → 29 → 30         | ~1–2 hours   |
+
+Steps 29 and 30 run for BOTH tiers — the HTML PRD page (with diagrams rendered as SVG) is the final user-facing deliverable.
 
 **Light-tier note:** steps 20 (integration map) and 21 (personas + stories) are KEPT in the light path because every standard_prd requires `Integration with existing product` and `User stories` headings; skipping them produces required headings with thin content. Step 22 (flows + entities) remains full-tier only.
 
@@ -145,11 +151,13 @@ If the user has clearly signalled intent in the original slash invocation (e.g.,
    - Tier rationale (filled in after step 17)
    - Wrapper requirements (if any: save path override, naming convention override)
 
-6. **Seed the TodoWrite list.** Create todos for all 12 step skill invocations using their integer step numbers:
+6. **Seed the TodoWrite list.** Create todos for all 14 step skill invocations using their integer step numbers:
    - `Step 17 — Skill: hyperresearch-prd-17-initialize`
    - `Step 18 — Skill: hyperresearch-prd-18-product-inventory`
    - ...
    - `Step 28 — Skill: hyperresearch-prd-28-readability-audit`
+   - `Step 29 — Skill: hyperresearch-prd-29-author-diagrams`
+   - `Step 30 — Skill: hyperresearch-prd-30-render-html`
 
    The todo list survives context compaction; it's your durable memory of where you are in the chain.
 
@@ -206,14 +214,16 @@ Context compaction may eat parts of this conversation. If you're unsure what ste
    - Step 26: `prd/patch-log.json`
    - Step 27: `prd/polish-log.json`
    - Step 28: `prd/readability-recommendations.json`, `prd/readability-decisions.json`
+   - Step 29: `prd/diagram-log.json` (and the final PRD file now contains Mermaid blocks)
+   - Step 30: `prd/notes/final_prd_<prd_tag>.html`, `prd/html-render-log.json`
 3. **Find the highest-numbered step whose artifact exists.** Resume from the next step.
 4. **Re-invoke this entry skill** if you've lost track entirely: `Skill(skill: "hyperresearch-prd")`. It loads fresh.
 
-## Final integrity gate (after step 28)
+## Final integrity gate (after step 30)
 
 Before declaring the run complete, verify every expected artifact exists. The required set depends on the tier:
 
-- **light tier:** `prd/notes/final_prd_<prd_tag>.md`, `prd/polish-log.json`, `prd/readability-recommendations.json`, `prd/readability-decisions.json`.
+- **light tier:** `prd/notes/final_prd_<prd_tag>.md`, `prd/notes/final_prd_<prd_tag>.html`, `prd/polish-log.json`, `prd/readability-recommendations.json`, `prd/readability-decisions.json`, `prd/diagram-log.json`, `prd/html-render-log.json`.
 - **full tier:** all light-tier artifacts PLUS the 4 critic findings, patch-log.json, comparisons/integration-map/personas/user-stories/flows/entities.
 
 If any artifact is missing, the responsible step failed silently. Re-spawn the responsible agent ONCE; if it fails again, write a minimal stub and log the failure before proceeding.
@@ -225,6 +235,12 @@ If any artifact is missing, the responsible step failed silently. Re-spawn the r
 3. **Patcher and polish-auditor are Read+Edit only.** Tool-lock is enforced at the Claude Code allowlist level; bypassing it is a critical violation.
 4. **One PRD per prd_tag.** The 6-hex suffix guarantees no overwrite across runs.
 5. **Existing PRD directory is read-only during the run.** Step 18 only READS the inventory. Never mutate existing PRD files from this pipeline.
+
+## Final deliverable
+
+When step 30 finishes, the artifact the user opens is:
+- **HTML PRD: `prd/notes/final_prd_<prd_tag>.html`** (self-contained, diagrams render as SVG via Mermaid)
+- Markdown source of truth: `prd/notes/final_prd_<prd_tag>.md`
 
 ## Now begin
 

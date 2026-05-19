@@ -55,9 +55,9 @@ pip install hyperresearch && hyperresearch install
 
 ---
 
-## The 16-step research pipeline
+## The 18-step research pipeline
 
-The entry skill is a thin router. It bootstraps the canonical research query, then invokes one step skill per pipeline phase via Claude Code's `Skill` tool. Each step's procedure is loaded fresh into context only when needed defeating context-rot problems that makes long pipelines silently drop steps.
+The entry skill is a thin router. It bootstraps the canonical research query, then invokes one step skill per pipeline phase via Claude Code's `Skill` tool. Each step's procedure is loaded fresh into context only when needed defeating context-rot problems that makes long pipelines silently drop steps. Steps 1–16 produce the markdown report; steps 17–18 add Mermaid diagrams and render a self-contained HTML page as the final deliverable.
 
 | # | Step | What it does | Tiers |
 |---|---|---|---|
@@ -77,6 +77,8 @@ The entry skill is a thin router. It bootstraps the canonical research query, th
 | 14 | Patcher | Surgical Edit hunks applied to draft (tool-locked Read+Edit) | full |
 | 15 | Polish | Hygiene + filler pass (tool-locked Read+Edit subagent) | both |
 | 16 | Readability audit | Recommender writes JSON suggestions; orchestrator selectively applies | both |
+| 17 | Author diagrams | Insert Mermaid blocks (hypothesis tree, source-tension graph, architecture, comparison, decision tree) into the final report | both |
+| 18 | Render HTML | Convert diagram-enriched markdown → self-contained HTML with rendered SVG diagrams (baoyu skill or Python fallback) | both |
 
 ### Depth Modes 
 
@@ -84,8 +86,10 @@ In your prompt, you can request one of two tiers and the rest of the pipeline sc
 
 | Tier | Steps that run | Typical time |
 |---|---|---|
-| `light` | bounded factual queries, surveys, comparisons — 1 → 2 → 10 → 15 → 16 | ~30–40 min |
-| `full` | deep argumentative analysis with adversarial review — all 16 steps | ~1.5–2.5 hours |
+| `light` | bounded factual queries, surveys, comparisons — 1 → 2 → 10 → 15 → 16 → 17 → 18 | ~30–40 min |
+| `full` | deep argumentative analysis with adversarial review — all 18 steps | ~1.5–2.5 hours |
+
+The HTML render step (18) is the same for both tiers. The markdown source lives at `research/notes/final_report_<vault_tag>.md`; the user-facing HTML is `research/notes/final_report_<vault_tag>.html`.
 
 ### The two load-bearing principles
 
@@ -114,9 +118,9 @@ In your prompt, you can request one of two tiers and the rest of the pipeline sc
 
 ---
 
-## The PRD extension (steps 17–28) — fork-only
+## The PRD extension (steps 17–30) — fork-only
 
-The fork adds a second pipeline that consumes a completed research report plus a feature request and produces a Product Requirements Document. Same step-skill chain, same canonical-input-is-gospel invariant, same patch-never-regenerate invariant, same tool-locked subagent pattern.
+The fork adds a second pipeline that consumes a completed research report plus a feature request and produces a Product Requirements Document. Same step-skill chain, same canonical-input-is-gospel invariant, same patch-never-regenerate invariant, same tool-locked subagent pattern. Final step renders an HTML PRD with Mermaid diagrams.
 
 | #  | Step                            | Tiers |
 |----|---------------------------------|-------|
@@ -131,17 +135,21 @@ The fork adds a second pipeline that consumes a completed research report plus a
 | 25 | 4 adversarial critics in parallel | full |
 | 26 | Patcher (Read+Edit only) | full |
 | 27 | Polish auditor (Read+Edit only) | all |
-| 28 | Readability audit + selective apply (FINAL) | all |
+| 28 | Readability audit + selective apply | all |
+| 29 | Author diagrams (persona map, user flow, scope boundary, integration touchpoints) into the PRD | all |
+| 30 | Render the diagram-enriched PRD to a self-contained HTML file (FINAL) | all |
 
 **What goes in:** a verbatim feature request + a prior `/hyperresearch` final report + an optional existing PRD directory (default `prd/`).
-**What comes out:** `prd/notes/final_prd_<prd_tag>.md` — a business-only PRD (no schemas, no APIs, no architecture) ready for engineering handoff.
+**What comes out:**
+- `prd/notes/final_prd_<prd_tag>.md` — a business-only PRD (no schemas, no APIs, no architecture) ready for engineering handoff.
+- `prd/notes/final_prd_<prd_tag>.html` — the same PRD rendered as a self-contained HTML page with persona maps, user flows, scope-boundary diagrams, and integration-touchpoint maps rendered as SVG. **This is the page the team actually opens.**
 
 ### Tier routing
 
-| Tier   | Steps                                                       | Typical time |
-|--------|-------------------------------------------------------------|--------------|
-| `light` | 17 → 18 → 19 → 20 → 21 → 23 (single draft) → 27 → 28        | ~30–40 min   |
-| `full`  | 17 → 18 → 19 → 20 → 21 → 22 → 23 → 24 → 25 → 26 → 27 → 28   | ~1–2 hours   |
+| Tier   | Steps                                                                               | Typical time |
+|--------|-------------------------------------------------------------------------------------|--------------|
+| `light` | 17 → 18 → 19 → 20 → 21 → 23 (single draft) → 27 → 28 → 29 → 30                     | ~30–40 min   |
+| `full`  | 17 → 18 → 19 → 20 → 21 → 22 → 23 → 24 → 25 → 26 → 27 → 28 → 29 → 30                | ~1–2 hours   |
 
 ### Per-step invocation
 
@@ -158,6 +166,15 @@ Every step is independently invokable, exactly like the research pipeline's 1–
 ### Skill discovery (NEW)
 
 Step 19 detects PMG-relevant Claude Code skills (`impeccable`, `frontend-design`, `content-engine`, `article-writing`, `investor-materials`, etc.) installed in your environment and writes them to `prd/relevant-skills.json`. The draft-orchestrator and synthesizer subagents read this list and invoke each listed skill via `Skill(skill: "...")` before drafting the sections it strengthens. Engineering / framework / DB skills are explicitly excluded — the PRD stays in the business lane.
+
+### HTML output (research and PRD)
+
+Both pipelines end with a Mermaid-enriched HTML page as the user-facing deliverable:
+
+- Research: `research/notes/final_report_<vault_tag>.html`
+- PRD: `prd/notes/final_prd_<prd_tag>.html`
+
+The HTML render step prefers the [`baoyu-markdown-to-html`](https://www.skills.sh/jimliu/baoyu-skills/baoyu-markdown-to-html) skill if installed (`npx skills add https://github.com/jimliu/baoyu-skills --skill baoyu-markdown-to-html`). If baoyu is not installed, a pure-Python fallback renders a sticky-TOC themed page and loads Mermaid.js from a CDN at view time. Either path produces a single self-contained file you can open directly in a browser.
 
 ### Documentation
 
