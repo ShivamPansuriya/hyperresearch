@@ -253,17 +253,31 @@ The fetcher and corpus-critic agents support the [Exa MCP server](https://exa.ai
 
 The corpus-critic uses Exa to verify each candidate gap before flagging it (so the gap-fetch wave in step 13 doesn't hunt for sources that already exist or genuinely don't exist).
 
-Setup: add to `~/.claude.json`:
+**Setup.** The install command can wire up Exa's hosted MCP for you automatically. Pass your API key (get one at [exa.ai](https://exa.ai)) via either:
+
+```bash
+# Inline flag
+hyperresearch install --global --exa-api-key sk-exa-...
+
+# Or via environment variable
+EXA_API_KEY=sk-exa-... hyperresearch install --global
+
+# Or interactively — `hyperresearch setup` prompts for a key (skippable)
+hyperresearch setup
+```
+
+If a key is supplied, the installer adds this entry to `~/.claude.json` (HTTP transport, no Node.js / npx needed):
 
 ```json
-"exa-web-search": {
-  "command": "npx",
-  "args": ["-y", "exa-mcp-server"],
-  "env": { "EXA_API_KEY": "YOUR_EXA_API_KEY_HERE" }
+"exa": {
+  "type": "http",
+  "url": "https://mcp.exa.ai/mcp?exaApiKey=YOUR_KEY&tools=web_search_exa,web_search_advanced_exa,get_code_context_exa,crawling_exa,company_research_exa,people_search_exa,deep_researcher_start,deep_researcher_check,deep_search_exa"
 }
 ```
 
-If Exa isn't configured, agents silently fall back to `WebSearch` + the academic APIs — the pipeline still works, just with lower discovery signal.
+If no key is supplied (no `--exa-api-key`, no `EXA_API_KEY`, blank at the setup prompt), the Exa install step is skipped silently. The pipeline still works using `WebSearch` + the academic APIs — just with lower discovery signal.
+
+The installer is idempotent: if any `exa*` MCP entry already exists in `~/.claude.json`, it's left unchanged.
 
 ---
 

@@ -112,12 +112,25 @@ def setup(
             profile = _create_profile_interactive()
         # else: skip, profile stays ""
 
+    # ── Step 3: Exa MCP API key (optional) ────────────────────────
+    console.print()
+    console.print(Rule("[bold]Step 3[/]  Exa MCP API key (optional)", style="cyan"))
+    console.print()
+    console.print("  [dim]Exa is a neural web-search engine. With an API key, the[/]")
+    console.print("  [dim]fetcher + corpus-critic agents use Exa's hosted MCP for[/]")
+    console.print("  [dim]higher-signal discovery. Get a key at https://exa.ai[/]")
+    console.print()
+    console.print("  [dim]Press Enter to skip — pipeline still works with WebSearch.[/]")
+    console.print()
+    exa_api_key = Prompt.ask("  Exa API key (or blank to skip)", default="").strip()
+
     # ── Execute ───────────────────────────────────────────────────
     console.print()
     console.print(Rule("[bold]Setting up", style="green"))
     console.print()
 
     from hyperresearch.core.agent_docs import _resolve_executable, inject_agent_docs
+    from hyperresearch.core.exa_mcp import install_exa_mcp
     from hyperresearch.core.hooks import install_hooks
     from hyperresearch.core.vault import Vault, VaultError
 
@@ -149,6 +162,17 @@ def setup(
         console.print(f"  [green]Hook:[/] {action}")
     if not hook_actions:
         console.print("  [dim]Hooks already installed[/]")
+
+    # Install Exa MCP entry if the user supplied a key (or EXA_API_KEY is set).
+    exa_status, exa_message = install_exa_mcp(exa_api_key or None)
+    if exa_status == "installed":
+        console.print(f"  [green]Exa MCP:[/] {exa_message}")
+    elif exa_status == "already_configured":
+        console.print(f"  [dim]Exa MCP:[/] {exa_message}")
+    elif exa_status == "skipped_no_key":
+        console.print("  [dim]Exa MCP:[/] skipped — re-run setup to add a key later")
+    else:
+        console.print(f"  [yellow]Exa MCP:[/] {exa_message}")
 
     # Install browser if needed
     if use_crawl4ai:

@@ -25,10 +25,16 @@ def install(
         "--steps-only",
         help="Install only the 16 step skills to <PATH>/.claude/skills/. Used internally by the entry skill bootstrap on first /hyperresearch invocation in a project. Not normally invoked by users.",
     ),
+    exa_api_key: str = typer.Option(
+        "",
+        "--exa-api-key",
+        help="Exa MCP API key (https://exa.ai). If omitted, falls back to the EXA_API_KEY environment variable. If neither is set, the Exa MCP install step is skipped silently — the pipeline still works using WebSearch + academic APIs.",
+    ),
 ) -> None:
     """Install hyperresearch: init vault + inject CLAUDE.md + install Claude Code hooks."""
     import sys
 
+    from hyperresearch.core.exa_mcp import install_exa_mcp
     from hyperresearch.core.hooks import (
         _install_hyperresearch_step_skills,
         install_global_hooks,
@@ -89,6 +95,10 @@ def install(
         # /hyperresearch-prd entry router and all 12 per-step slash commands
         # work in every Claude Code session.
         prd_result = install_prd_extension_global(home)
+        # Add the Exa MCP server entry to ~/.claude.json if an API key is
+        # provided via --exa-api-key or EXA_API_KEY. Silently skipped if no
+        # key is available — the pipeline still works with WebSearch only.
+        exa_status, exa_message = install_exa_mcp(exa_api_key)
 
         if json_output:
             output(
@@ -99,6 +109,7 @@ def install(
                         "hooks_installed": hook_actions,
                         "prd_skills_installed": prd_result["skills_installed"],
                         "prd_agents_installed": prd_result["agents_installed"],
+                        "exa_mcp": {"status": exa_status, "message": exa_message},
                     },
                     vault=None,
                 ),
@@ -116,6 +127,7 @@ def install(
             f"[green]PRD extension:[/] {len(prd_result['skills_installed'])} skills, "
             f"{len(prd_result['agents_installed'])} agents installed globally."
         )
+        _print_exa_status(exa_status, exa_message)
         console.print(
             "\n[bold]Ready.[/] /hyperresearch and /hyperresearch-prd are now available in every Claude Code session."
         )
@@ -170,6 +182,10 @@ def install(
     # Step 3: Auto-configure crawl4ai if installed
     crawl4ai_status = _setup_crawl4ai(vault)
 
+    # Step 4c: Add Exa MCP server entry to ~/.claude.json if an API key is
+    # supplied. Silently skipped if no key — pipeline works without it.
+    exa_status, exa_message = install_exa_mcp(exa_api_key)
+
     # Step 5: Report
     data = {
         "vault_path": str(vault.root),
@@ -179,6 +195,7 @@ def install(
         "prd_skills_installed": prd_result["skills_installed"],
         "prd_agents_installed": prd_result["agents_installed"],
         "crawl4ai": crawl4ai_status,
+        "exa_mcp": {"status": exa_status, "message": exa_message},
     }
 
     if json_output:
@@ -216,12 +233,32 @@ def install(
                 "For local headless browsing: pip install hyperresearch[crawl4ai]"
             )
 
+        _print_exa_status(exa_status, exa_message)
+
         console.print("\n[bold]Ready.[/] Agents will now check the research base before web searches.")
         console.print(
             "[dim]/hyperresearch generates a research report; /hyperresearch-prd then turns "
             "a feature request + that research into a PRD.[/]"
         )
         console.print("[dim]Tip: Run 'hyperresearch setup' for interactive configuration (profile, stealth, etc.)[/]")
+
+
+def _print_exa_status(status: str, message: str) -> None:
+    """Pretty-print the Exa MCP install result to the console."""
+    if status == "installed":
+        console.print(f"[green]Exa MCP:[/] {message}")
+    elif status == "already_configured":
+        console.print(f"[dim]Exa MCP:[/] {message}")
+    elif status == "skipped_no_key":
+        console.print(
+            "[dim]Exa MCP:[/] skipped (no API key). "
+            "Re-run with --exa-api-key <KEY> or set EXA_API_KEY to enable neural web search. "
+            "Get a key at https://exa.ai"
+        )
+    elif status == "skipped_no_claude_config":
+        console.print(f"[yellow]Exa MCP:[/] {message}")
+    else:
+        console.print(f"[yellow]Exa MCP:[/] {message}")
 
 
 def _setup_crawl4ai(vault) -> str:
