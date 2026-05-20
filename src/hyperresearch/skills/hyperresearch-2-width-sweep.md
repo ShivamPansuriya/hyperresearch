@@ -73,8 +73,8 @@ Before spawning any fetchers, produce a **search plan** that maps the decomposit
    | Sub-Q1 | "financial repression China scholarly analysis" | academic | depth | web_search_advanced_exa(category:"research paper") | canonical |
    | Entity: PE | "China private equity returns academic study" | academic | depth | API:SemanticScholar -> web_search_advanced_exa(category:"research paper") | canonical |
    | Sub-Q2 | "Tesla Q3 2024 10-Q segment revenue" | filing | period-pinned | web_search_advanced_exa(category:"financial report", dates 2024-09..2024-12) | tabular |
-   | Sub-Q1 | "China financial repression complaints" | reddit | adversarial | mcp__reddit__search(query:"China capital controls problem") | community |
-   | Sub-Q3 | r/ChinaInvesting top of month | reddit | breadth | mcp__reddit__get_subreddit_posts(subreddit:"ChinaInvesting", sort:"top", time:"month") | current |
+   | Sub-Q1 | "China financial repression complaints" | reddit | adversarial | mcp__reddit__reddit_search(query:"China capital controls problem") | community |
+   | Sub-Q3 | r/ChinaInvesting top of month | reddit | breadth | mcp__reddit__reddit_get_subreddit_posts(subreddit:"ChinaInvesting", sort:"top", time:"month") | current |
    | Sub-Q2 | PBoC monetary policy releases index | firecrawl | depth | mcp__firecrawl__firecrawl_map(url:"www.pbc.gov.cn", search:"monetary policy") | site-exhaustive |
    | Sub-Q2 | Tesla Q3 2024 10-Q structured line items | firecrawl | period-pinned | mcp__firecrawl__firecrawl_extract(urls:[10-Q PDF], schema:{segment_revenue, EBITDA, ...}) | structured |
    ```
@@ -91,9 +91,9 @@ Before spawning any fetchers, produce a **search plan** that maps the decomposit
    - **"What is the community discussing about <topic> right now"** → Reddit MCP
 
    **Reddit mode picker (community lens — use ALONGSIDE Exa, not instead of):**
-   - **Discovery across all of Reddit** (you don't yet know which subreddit) → `mcp__reddit__search(query: "<topic> problem OR issue OR switching")`
-   - **Focused search inside a known subreddit** → `mcp__reddit__search_subreddit(subreddit, query)`
-   - **What's hot/top in a community right now** → `mcp__reddit__get_subreddit_posts(subreddit, sort: "top", time: "month")`
+   - **Discovery across all of Reddit** (you don't yet know which subreddit) → `mcp__reddit__reddit_search(query: "<topic> problem OR issue OR switching")`
+   - **Focused search inside a known subreddit** → `mcp__reddit__reddit_search_subreddit(subreddit, query)`
+   - **What's hot/top in a community right now** → `mcp__reddit__reddit_get_subreddit_posts(subreddit, sort: "top", time: "month")`
    - **Pull a thread's full comment tree** (after search returns a load-bearing candidate) → `mcp__reddit__get_post(post_id)`
 
    Reddit is **mandatory** for any topic that touches: developer tools, consumer products, software framework adoption, medical / drug side-effects, hiring / compensation reality, emerging-tech adoption, DIY workarounds for closed-vendor limitations, or genuine populist sentiment. Skip Reddit only for pure-academic methodology questions and for topics so niche no relevant subreddit exists.
@@ -102,7 +102,7 @@ Before spawning any fetchers, produce a **search plan** that maps the decomposit
 
    **Firecrawl mode picker (heavy-page / structured-data lens — use ALONGSIDE Exa, NEVER as a default):**
    - **JS-heavy / SPA / paywall-fronted page that `{hpr_path} fetch` chokes on** → `mcp__firecrawl__firecrawl_scrape(url, waitFor: 2000, formats: ["markdown"])`
-   - **Bulk re-scrape of 10-100 known URLs** (e.g. all docs pages on a vendor site) → `mcp__firecrawl__firecrawl_batch_scrape(urls, formats: ["markdown"])` + poll with `firecrawl_check_batch_status`
+   - **Bulk re-scrape of 10-100 known URLs** (e.g. all docs pages on a vendor site) → loop `mcp__firecrawl__firecrawl_scrape` per URL (this MCP build doesn't expose batch_scrape; if all URLs are on one domain prefer `firecrawl_crawl` instead)
    - **Discover every URL on an authoritative domain** (regulator filings index, vendor docs, academic group publications) → `mcp__firecrawl__firecrawl_map(url, search: "<keyword>")`, then pick the load-bearing URLs and `batch_scrape` or `{hpr_path} fetch` them
    - **Search the web AND get the full content of results in one call** → `mcp__firecrawl__firecrawl_search(query, scrapeOptions: {formats: ["markdown"]})` (use sparingly — saves search→fetch round trip)
    - **Recursive crawl of a single domain** (forum, paginated blog, government portal without a sitemap) → `mcp__firecrawl__firecrawl_crawl(url, maxDepth: 2, limit: 50)` (credit-heavy — cap aggressively, poll with `firecrawl_check_crawl_status`)

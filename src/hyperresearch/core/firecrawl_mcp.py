@@ -30,13 +30,12 @@ from typing import Literal
 # firecrawl_search_feedback (housekeeping for refunds).
 _FIRECRAWL_TOOLS: tuple[str, ...] = (
     "firecrawl_scrape",
-    "firecrawl_batch_scrape",
-    "firecrawl_check_batch_status",
     "firecrawl_map",
     "firecrawl_search",
     "firecrawl_crawl",
     "firecrawl_check_crawl_status",
     "firecrawl_extract",
+    "firecrawl_parse",
 )
 
 _FIRECRAWL_PACKAGE = "firecrawl-mcp"

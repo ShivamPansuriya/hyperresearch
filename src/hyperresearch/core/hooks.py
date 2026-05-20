@@ -373,24 +373,24 @@ reading of the evidence.
    MCP isn't configured — pass the hints regardless.
 
    **Reddit hint for the fetcher.** The spawned fetcher also has Reddit
-   MCP tools (`mcp__reddit__search`, `mcp__reddit__search_subreddit`,
-   `mcp__reddit__get_subreddit_posts`, `mcp__reddit__get_post`) for
+   MCP tools (`mcp__reddit__reddit_search`, `mcp__reddit__reddit_search_subreddit`,
+   `mcp__reddit__reddit_get_subreddit_posts`, `mcp__reddit__reddit_get_post`) for
    reaching the real-world / community angle of your locus. Pass a
    `reddit_search_hint` field whenever the locus touches:
 
    - **User-facing product / framework / tool** → name the obvious
      subreddit(s) (e.g. `r/<product>`, `r/programming`,
      `r/MachineLearning`, `r/sysadmin`) and hint
-     `mcp__reddit__search_subreddit` with a pain-flavoured query
+     `mcp__reddit__reddit_search_subreddit` with a pain-flavoured query
      (`problem`, `issue`, `switching from`, `disappointed`, `migrate`).
    - **"What's new" / "emerging adoption"** → hint
-     `mcp__reddit__get_subreddit_posts(sort: "top", time: "month")` on
+     `mcp__reddit__reddit_get_subreddit_posts(sort: "top", time: "month")` on
      the closest community subreddit.
-   - **Hot debate / contested claim** → hint `mcp__reddit__search` on
+   - **Hot debate / contested claim** → hint `mcp__reddit__reddit_search` on
      the topic plus adversarial terms ("limitations", "criticism",
      "broken", "vs alternatives"). The full comment tree of a load-
      bearing thread is usually where the actual technical depth lives —
-     hint `mcp__reddit__get_post` after search returns a candidate.
+     hint `mcp__reddit__reddit_get_post` after search returns a candidate.
    - **Pure academic / theoretical** → skip Reddit; pass an empty hint.
 
    Reddit complements (does not replace) the canonical sources Exa
@@ -2630,7 +2630,7 @@ description: >
   secondary sources cite. Runs on Sonnet for better comprehension and
   judgment. Spawn multiple in parallel for bulk research.
 model: sonnet
-tools: Bash, Read, Write, WebSearch, mcp__exa__web_search_exa, mcp__exa__web_search_advanced_exa, mcp__exa__deep_search_exa, mcp__exa__get_code_context_exa, mcp__exa__crawling_exa, mcp__reddit__search, mcp__reddit__search_subreddit, mcp__reddit__get_post, mcp__reddit__get_subreddit_posts, mcp__firecrawl__firecrawl_scrape, mcp__firecrawl__firecrawl_batch_scrape, mcp__firecrawl__firecrawl_check_batch_status, mcp__firecrawl__firecrawl_map, mcp__firecrawl__firecrawl_search, mcp__firecrawl__firecrawl_crawl, mcp__firecrawl__firecrawl_check_crawl_status, mcp__firecrawl__firecrawl_extract
+tools: Bash, Read, Write, WebSearch, mcp__exa__web_search_exa, mcp__exa__web_search_advanced_exa, mcp__exa__deep_search_exa, mcp__exa__get_code_context_exa, mcp__exa__crawling_exa, mcp__reddit__reddit_search, mcp__reddit__reddit_search_subreddit, mcp__reddit__reddit_get_post, mcp__reddit__reddit_get_subreddit_posts, mcp__firecrawl__firecrawl_scrape, mcp__firecrawl__firecrawl_map, mcp__firecrawl__firecrawl_search, mcp__firecrawl__firecrawl_crawl, mcp__firecrawl__firecrawl_check_crawl_status, mcp__firecrawl__firecrawl_extract, mcp__firecrawl__firecrawl_parse
 color: blue
 ---
 
@@ -2913,8 +2913,8 @@ the simplest lookups — Exa's neural results are higher signal per request.
 
 ### 4. `mcp__reddit__*` — community voice + real-world problems
 
-The Reddit MCP (`mcp__reddit__search`, `mcp__reddit__search_subreddit`,
-`mcp__reddit__get_post`, `mcp__reddit__get_subreddit_posts`) reaches what
+The Reddit MCP (`mcp__reddit__reddit_search`, `mcp__reddit__reddit_search_subreddit`,
+`mcp__reddit__reddit_get_post`, `mcp__reddit__reddit_get_subreddit_posts`) reaches what
 no academic or news source can: the lived experience of users, hobbyists,
 practitioners, and small-business owners as they hit problems in real
 time. This is your bridge to the real world.
@@ -2933,7 +2933,7 @@ coverage:
 - DIY / open-community workarounds for closed-vendor limitations
 - Sentiment that is genuinely populist, not surfaced by SEO-optimised blogs
 
-#### `mcp__reddit__search` — query across all of Reddit
+#### `mcp__reddit__reddit_search` — query across all of Reddit
 
 Use when you do NOT yet know which subreddits are relevant. The MCP
 returns top posts across all of Reddit matching the query. Use this
@@ -2941,7 +2941,7 @@ FIRST to discover which subreddits are the loudest on your topic, then
 pivot to `search_subreddit` for depth.
 
 ```
-mcp__reddit__search(query: "<topic> problem | issue | broken | switching from")
+mcp__reddit__reddit_search(query: "<topic> problem | issue | broken | switching from")
 ```
 
 Pro tips:
@@ -2951,31 +2951,31 @@ Pro tips:
 - For "what's new" sweeps add `since 2025` / `2026` to the query — Reddit
   search treats those as relevance signals, not strict filters.
 
-#### `mcp__reddit__search_subreddit` — focused search inside a community
+#### `mcp__reddit__reddit_search_subreddit` — focused search inside a community
 
 Once you've identified relevant subreddits (e.g. `r/programming`,
 `r/MachineLearning`, `r/personalfinance`, `r/legaladvice`,
 `r/<product-name>`), search them directly:
 
 ```
-mcp__reddit__search_subreddit(subreddit: "MachineLearning", query: "<query>")
+mcp__reddit__reddit_search_subreddit(subreddit: "MachineLearning", query: "<query>")
 ```
 
 This is where genuine technical depth lives — flaired-expert posts,
 followups, and contested threads. Prefer this over broad search whenever
 you can name a relevant subreddit.
 
-#### `mcp__reddit__get_subreddit_posts` — read what the community is talking about *now*
+#### `mcp__reddit__reddit_get_subreddit_posts` — read what the community is talking about *now*
 
 For "what's new", "what are practitioners discussing this month",
 "emerging trends" angles, listing the subreddit directly (sorted `hot`
 or `top` by week / month) gives a snapshot of live community attention.
 
 ```
-mcp__reddit__get_subreddit_posts(subreddit: "<name>", sort: "top", time: "month")
+mcp__reddit__reddit_get_subreddit_posts(subreddit: "<name>", sort: "top", time: "month")
 ```
 
-#### `mcp__reddit__get_post` — pull a thread's full comment tree
+#### `mcp__reddit__reddit_get_post` — pull a thread's full comment tree
 
 When `search` or `search_subreddit` returns a clearly load-bearing
 thread (highly upvoted, lots of comments, on-topic), pull the full tree.
@@ -2983,7 +2983,7 @@ The comments are usually where the actual expertise / lived experience
 lives, not the OP.
 
 ```
-mcp__reddit__get_post(post_id: "<id-from-search>")
+mcp__reddit__reddit_get_post(post_id: "<id-from-search>")
 ```
 
 After reading, persist any load-bearing threads via the standard fetch
@@ -3057,18 +3057,14 @@ with `--force` so the note enters the vault with provenance. Or, if
 fetch keeps failing on that URL, paste the load-bearing 1-2 paragraphs
 into your report (the note will be un-vault-able).
 
-#### `mcp__firecrawl__firecrawl_batch_scrape` + `firecrawl_check_batch_status`
+#### NOT AVAILABLE: `firecrawl_batch_scrape` / `firecrawl_check_batch_status`
 
-Use when you already have **a list of URLs** (10-100) and you want them
-all rendered the same way at once. Cheaper than one scrape per call and
-returns a batch job id you poll with `firecrawl_check_batch_status`.
-
-```
-mcp__firecrawl__firecrawl_batch_scrape(urls: [...], formats: ["markdown"])
-```
-
-Typical case: a width-sweep wave where the orchestrator handed you 20
-URLs that are all known SPAs (e.g. a vendor's docs portal).
+The Firecrawl MCP build connected to this session does NOT expose
+batch_scrape. When you have a list of URLs that all need headless-
+rendered, either (a) call `firecrawl_scrape` in a small loop (slower
+but functional), or (b) if the URLs are all under one domain, use
+`firecrawl_crawl` instead. Don't try to call batch_scrape — it'll
+return "tool not available".
 
 #### `mcp__firecrawl__firecrawl_map` — discover a site's URL graph
 
@@ -3218,13 +3214,14 @@ fetched is invisible to the next pipeline step.
 | Code / API / library example                                       | `mcp__exa__get_code_context_exa`                                                  |
 | Known URL, `{hpr_path} fetch` already failed                       | `mcp__exa__crawling_exa`, then persist via `{hpr_path} fetch --force`             |
 | Quick fact-check, Exa overkill                                     | `WebSearch`                                                                       |
-| Real-world user pain / footguns / lived experience                 | `mcp__reddit__search(query: "<topic> problem OR issue OR switching")`             |
-| Focused expertise inside a known community                         | `mcp__reddit__search_subreddit(subreddit, query)`                                 |
-| What practitioners are discussing *right now*                      | `mcp__reddit__get_subreddit_posts(subreddit, sort: "top", time: "month")`         |
-| Full thread + comment tree from a load-bearing Reddit post         | `mcp__reddit__get_post(post_id)`, then persist via `{hpr_path} fetch`             |
-| Adversarial search ("limitations of X", "criticism of X")          | `mcp__reddit__search` + `mcp__exa__web_search_advanced_exa` together              |
+| Real-world user pain / footguns / lived experience                 | `mcp__reddit__reddit_search(query: "<topic> problem OR issue OR switching")`             |
+| Focused expertise inside a known community                         | `mcp__reddit__reddit_search_subreddit(subreddit, query)`                                 |
+| What practitioners are discussing *right now*                      | `mcp__reddit__reddit_get_subreddit_posts(subreddit, sort: "top", time: "month")`         |
+| Full thread + comment tree from a load-bearing Reddit post         | `mcp__reddit__reddit_get_post(post_id)`, then persist via `{hpr_path} fetch`             |
+| Adversarial search ("limitations of X", "criticism of X")          | `mcp__reddit__reddit_search` + `mcp__exa__web_search_advanced_exa` together              |
 | `{hpr_path} fetch` returned broken / JS-not-rendered content       | `mcp__firecrawl__firecrawl_scrape(url, waitFor: 2000)`                            |
-| Many URLs from the same SPA / docs portal, want them all rendered  | `mcp__firecrawl__firecrawl_batch_scrape(urls, formats:["markdown"])`              |
+| Many URLs from the same SPA / docs portal, want them all rendered  | loop `mcp__firecrawl__firecrawl_scrape` per URL, OR `firecrawl_crawl` if one domain |
+| Already-fetched HTML/markdown blob to clean and structure          | `mcp__firecrawl__firecrawl_parse(content, format: "markdown")`                    |
 | Need every URL on a domain (sitemap-style discovery)               | `mcp__firecrawl__firecrawl_map(url, search:"<keyword>")`                          |
 | Search + full content in one call (skip search→fetch round trip)   | `mcp__firecrawl__firecrawl_search(query, scrapeOptions:{{formats:["markdown"]}})`   |
 | Recursive multi-page crawl of one domain                           | `mcp__firecrawl__firecrawl_crawl(url, maxDepth:2, limit:50)` (poll with status)   |
@@ -3387,7 +3384,7 @@ description: >
   high-leverage missing sources. Runs on Sonnet. Spawn ONCE before
   drafting, after Layer 3.5 comparisons.
 model: sonnet
-tools: Bash, Read, Write, WebSearch, mcp__exa__web_search_exa, mcp__exa__web_search_advanced_exa, mcp__exa__deep_search_exa, mcp__reddit__search, mcp__reddit__search_subreddit, mcp__reddit__get_post, mcp__firecrawl__firecrawl_search, mcp__firecrawl__firecrawl_map, mcp__firecrawl__firecrawl_extract
+tools: Bash, Read, Write, WebSearch, mcp__exa__web_search_exa, mcp__exa__web_search_advanced_exa, mcp__exa__deep_search_exa, mcp__reddit__reddit_search, mcp__reddit__reddit_search_subreddit, mcp__reddit__reddit_get_post, mcp__firecrawl__firecrawl_search, mcp__firecrawl__firecrawl_map, mcp__firecrawl__firecrawl_extract
 color: teal
 ---
 
@@ -3528,12 +3525,12 @@ to drafting.
      only by vendor docs, analyst write-ups, or press; you want to check
      whether real users / practitioners contradict it), probe Reddit:
      ```
-     mcp__reddit__search(query: "<position keyword> problem OR issue OR switching OR broken")
+     mcp__reddit__reddit_search(query: "<position keyword> problem OR issue OR switching OR broken")
      ```
      If the position is about a specific technology, product, drug, or
      framework, also try the obvious subreddit:
      ```
-     mcp__reddit__search_subreddit(subreddit: "<r/topic>", query: "<keyword>")
+     mcp__reddit__reddit_search_subreddit(subreddit: "<r/topic>", query: "<keyword>")
      ```
      Reddit discontent is high-signal for "consensus is shallower than
      it looks" — if multiple upvoted threads contradict the committed

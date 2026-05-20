@@ -285,10 +285,10 @@ The fetcher, corpus-critic, and depth-investigator agents also support the [Redd
 
 When configured, agents call:
 
-- `mcp__reddit__search` — query across all of Reddit (discovery — surfaces which subreddits are loudest on the topic).
-- `mcp__reddit__search_subreddit` — focused search inside a specific community (`r/MachineLearning`, `r/sysadmin`, etc.) for genuine technical depth.
-- `mcp__reddit__get_subreddit_posts` — top / hot posts in a community right now (for "what are practitioners discussing this month" angles).
-- `mcp__reddit__get_post` — the full comment tree of a load-bearing thread (where the actual expertise usually lives, not the OP).
+- `mcp__reddit__reddit_search` — query across all of Reddit (discovery — surfaces which subreddits are loudest on the topic).
+- `mcp__reddit__reddit_search_subreddit` — focused search inside a specific community (`r/MachineLearning`, `r/sysadmin`, etc.) for genuine technical depth.
+- `mcp__reddit__reddit_get_subreddit_posts` — top / hot posts in a community right now (for "what are practitioners discussing this month" angles).
+- `mcp__reddit__reddit_get_post` — the full comment tree of a load-bearing thread (where the actual expertise usually lives, not the OP).
 
 The corpus-critic uses Reddit as a counter-evidence probe: when a committed position rests on vendor docs, analyst write-ups, or press, it cross-checks against user-community discussion. If practitioners contradict the position, the critic flags a `community-counter-evidence` gap for the step-13 fetch wave.
 
@@ -326,7 +326,7 @@ The fetcher, corpus-critic, and depth-investigator agents also support the [Fire
 When configured, agents call:
 
 - `mcp__firecrawl__firecrawl_scrape` — one URL → clean markdown with headless-browser rendering, `waitFor`, scroll/click actions. The escalation path when `hyperresearch fetch` returns broken content.
-- `mcp__firecrawl__firecrawl_batch_scrape` + `firecrawl_check_batch_status` — render a list of 10-100 URLs efficiently; poll for completion.
+- `mcp__firecrawl__firecrawl_parse` — parse already-fetched HTML/markdown content into clean structured text (the current Firecrawl MCP build exposes this in place of the deprecated `batch_scrape`; for bulk URL rendering call `firecrawl_scrape` in a small loop or use `firecrawl_crawl` if all URLs share one domain).
 - `mcp__firecrawl__firecrawl_map` — discover every URL on a domain (sitemap-style). Pair with `batch_scrape` for site-exhaustiveness gaps.
 - `mcp__firecrawl__firecrawl_search` — web search + full-content extraction in one call. Saves a search→fetch round trip when you want page bodies inline.
 - `mcp__firecrawl__firecrawl_crawl` + `firecrawl_check_crawl_status` — recursive multi-page crawl with depth/limit controls. Credit-heavy — capped aggressively.
