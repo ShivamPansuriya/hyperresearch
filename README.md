@@ -315,6 +315,54 @@ The pipeline still works without Reddit configured — agents fall back to `site
 
 The installer is idempotent: if any `reddit*` MCP entry already exists in `~/.claude.json`, it's left unchanged.
 
+### Firecrawl MCP (heavy-page scrape + crawl + structured extract)
+
+The fetcher, corpus-critic, and depth-investigator agents also support the [Firecrawl MCP server](https://github.com/firecrawl/firecrawl-mcp-server) — a hosted headless-browser pipeline that fills three gaps Exa and the built-in fetcher can't:
+
+- **JS-heavy / SPA / paywall-fronted pages** that render empty under `hyperresearch fetch` (LinkedIn, modern news outlets, vendor dashboards, regulator viewers).
+- **Exhaustive coverage of a specific authoritative site** — discover every URL on a domain, batch-scrape the load-bearing ones.
+- **Structured data extraction via JSON schema** — table-like fields (filing line items, product specs, paper metadata) extracted consistently across many pages.
+
+When configured, agents call:
+
+- `mcp__firecrawl__firecrawl_scrape` — one URL → clean markdown with headless-browser rendering, `waitFor`, scroll/click actions. The escalation path when `hyperresearch fetch` returns broken content.
+- `mcp__firecrawl__firecrawl_batch_scrape` + `firecrawl_check_batch_status` — render a list of 10-100 URLs efficiently; poll for completion.
+- `mcp__firecrawl__firecrawl_map` — discover every URL on a domain (sitemap-style). Pair with `batch_scrape` for site-exhaustiveness gaps.
+- `mcp__firecrawl__firecrawl_search` — web search + full-content extraction in one call. Saves a search→fetch round trip when you want page bodies inline.
+- `mcp__firecrawl__firecrawl_crawl` + `firecrawl_check_crawl_status` — recursive multi-page crawl with depth/limit controls. Credit-heavy — capped aggressively.
+- `mcp__firecrawl__firecrawl_extract` — structured fields via LLM + JSON schema. The standout tool for comparison tables, filings, specs.
+
+The corpus-critic uses Firecrawl for two new gap types: `site-exhaustiveness` (does an authoritative domain have pages the corpus missed?) and `structured-extract` (the corpus has the source pages but no structured fields).
+
+**Setup.** Pass your Firecrawl API key (get one at [firecrawl.dev](https://firecrawl.dev)) via flag, env, or interactive prompt:
+
+```bash
+hyperresearch install --global --firecrawl-api-key fc-...
+FIRECRAWL_API_KEY=fc-... hyperresearch install --global
+hyperresearch setup        # interactive — prompts for the key (skippable)
+```
+
+If a key is supplied, the installer adds this entry to `~/.claude.json` (stdio transport via `npx`):
+
+```json
+"firecrawl": {
+  "type": "stdio",
+  "command": "npx",
+  "args": ["-y", "firecrawl-mcp"],
+  "env": {
+    "FIRECRAWL_API_KEY": "fc-...",
+    "FIRECRAWL_RETRY_MAX_ATTEMPTS": "5",
+    "FIRECRAWL_CREDIT_WARNING_THRESHOLD": "2000"
+  }
+}
+```
+
+If no key is supplied, the Firecrawl install step is skipped silently. The pipeline still works using `hyperresearch fetch` + Exa — agents just won't have the heavy-page / structured-extract escalation paths available.
+
+`npx` ships with Node.js LTS. If `npx` is missing, the installer skips Firecrawl with a hint to install Node.
+
+The installer is idempotent: if any `firecrawl*` MCP entry already exists in `~/.claude.json`, it's left unchanged.
+
 ---
 
 ## What it doesn't do

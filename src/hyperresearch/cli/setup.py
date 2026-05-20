@@ -124,6 +124,19 @@ def setup(
     console.print()
     exa_api_key = Prompt.ask("  Exa API key (or blank to skip)", default="").strip()
 
+    # ── Step 3b: Firecrawl MCP API key (optional) ─────────────────
+    console.print()
+    console.print(Rule("[bold]Step 3b[/]  Firecrawl MCP API key (optional)", style="cyan"))
+    console.print()
+    console.print("  [dim]Firecrawl scrapes JS-heavy pages, crawls whole domains, and[/]")
+    console.print("  [dim]extracts structured data via LLM schemas. Highly complementary[/]")
+    console.print("  [dim]to Exa: Exa finds URLs, Firecrawl extracts their full content.[/]")
+    console.print("  [dim]Get a key at https://firecrawl.dev[/]")
+    console.print()
+    console.print("  [dim]Press Enter to skip — pipeline still works with `hyperresearch fetch`.[/]")
+    console.print()
+    firecrawl_api_key = Prompt.ask("  Firecrawl API key (or blank to skip)", default="").strip()
+
     # ── Execute ───────────────────────────────────────────────────
     console.print()
     console.print(Rule("[bold]Setting up", style="green"))
@@ -131,6 +144,7 @@ def setup(
 
     from hyperresearch.core.agent_docs import _resolve_executable, inject_agent_docs
     from hyperresearch.core.exa_mcp import install_exa_mcp
+    from hyperresearch.core.firecrawl_mcp import install_firecrawl_mcp
     from hyperresearch.core.reddit_mcp import install_reddit_mcp
     from hyperresearch.core.hooks import install_hooks
     from hyperresearch.core.vault import Vault, VaultError
@@ -185,6 +199,17 @@ def setup(
         console.print(f"  [yellow]Reddit MCP:[/] {reddit_message}")
     else:
         console.print(f"  [yellow]Reddit MCP:[/] {reddit_message}")
+
+    # Install Firecrawl MCP entry if the user supplied a key (or env var set).
+    firecrawl_status, firecrawl_message = install_firecrawl_mcp(firecrawl_api_key or None)
+    if firecrawl_status == "installed":
+        console.print(f"  [green]Firecrawl MCP:[/] {firecrawl_message}")
+    elif firecrawl_status == "already_configured":
+        console.print(f"  [dim]Firecrawl MCP:[/] {firecrawl_message}")
+    elif firecrawl_status == "skipped_no_key":
+        console.print("  [dim]Firecrawl MCP:[/] skipped — re-run setup to add a key later")
+    else:
+        console.print(f"  [yellow]Firecrawl MCP:[/] {firecrawl_message}")
 
     # Install browser if needed
     if use_crawl4ai:

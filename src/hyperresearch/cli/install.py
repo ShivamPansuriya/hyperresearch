@@ -35,11 +35,17 @@ def install(
         "--no-reddit",
         help="Skip installing the Reddit MCP server (eliasbiondo/reddit-no-auth-mcp-server). By default the installer adds it to ~/.claude.json so agents can read real-world community discussion. Requires `uvx` (Astral uv) on PATH; otherwise skipped automatically with a hint.",
     ),
+    firecrawl_api_key: str = typer.Option(
+        "",
+        "--firecrawl-api-key",
+        help="Firecrawl MCP API key (https://firecrawl.dev). If omitted, falls back to the FIRECRAWL_API_KEY environment variable, then to an interactive prompt. If neither is set, the Firecrawl MCP install step is skipped silently — the pipeline still works using {hpr_path} fetch + Exa.",
+    ),
 ) -> None:
     """Install hyperresearch: init vault + inject CLAUDE.md + install Claude Code hooks."""
     import sys
 
     from hyperresearch.core.exa_mcp import install_exa_mcp
+    from hyperresearch.core.firecrawl_mcp import install_firecrawl_mcp
     from hyperresearch.core.reddit_mcp import install_reddit_mcp
     from hyperresearch.core.hooks import (
         _install_hyperresearch_step_skills,
@@ -110,6 +116,9 @@ def install(
         # Reddit MCP: no API key needed; install unconditionally unless --no-reddit
         # was passed or uvx is missing (in which case skip with a hint).
         reddit_status, reddit_message = install_reddit_mcp(skip=no_reddit)
+        # Firecrawl MCP: API key required (same resolve pattern as Exa).
+        firecrawl_key = _resolve_firecrawl_key_with_optional_prompt(firecrawl_api_key, json_output)
+        firecrawl_status, firecrawl_message = install_firecrawl_mcp(firecrawl_key or None)
 
         if json_output:
             output(
@@ -122,6 +131,7 @@ def install(
                         "prd_agents_installed": prd_result["agents_installed"],
                         "exa_mcp": {"status": exa_status, "message": exa_message},
                         "reddit_mcp": {"status": reddit_status, "message": reddit_message},
+                        "firecrawl_mcp": {"status": firecrawl_status, "message": firecrawl_message},
                     },
                     vault=None,
                 ),
@@ -141,6 +151,7 @@ def install(
         )
         _print_exa_status(exa_status, exa_message)
         _print_reddit_status(reddit_status, reddit_message)
+        _print_firecrawl_status(firecrawl_status, firecrawl_message)
         console.print(
             "\n[bold]Ready.[/] /hyperresearch and /hyperresearch-prd are now available in every Claude Code session."
         )
@@ -205,6 +216,10 @@ def install(
     # Install unconditionally unless --no-reddit was passed or uvx is missing.
     reddit_status, reddit_message = install_reddit_mcp(skip=no_reddit)
 
+    # Step 4e: Firecrawl MCP — high-fidelity scrape / crawl / extract.
+    firecrawl_key = _resolve_firecrawl_key_with_optional_prompt(firecrawl_api_key, json_output)
+    firecrawl_status, firecrawl_message = install_firecrawl_mcp(firecrawl_key or None)
+
     # Step 5: Report
     data = {
         "vault_path": str(vault.root),
@@ -216,6 +231,7 @@ def install(
         "crawl4ai": crawl4ai_status,
         "exa_mcp": {"status": exa_status, "message": exa_message},
         "reddit_mcp": {"status": reddit_status, "message": reddit_message},
+        "firecrawl_mcp": {"status": firecrawl_status, "message": firecrawl_message},
     }
 
     if json_output:
@@ -255,6 +271,7 @@ def install(
 
         _print_exa_status(exa_status, exa_message)
         _print_reddit_status(reddit_status, reddit_message)
+        _print_firecrawl_status(firecrawl_status, firecrawl_message)
 
         console.print("\n[bold]Ready.[/] Agents will now check the research base before web searches.")
         console.print(
@@ -334,6 +351,64 @@ def _print_exa_status(status: str, message: str) -> None:
         console.print(f"[yellow]Exa MCP:[/] {message}")
     else:
         console.print(f"[yellow]Exa MCP:[/] {message}")
+
+
+def _resolve_firecrawl_key_with_optional_prompt(cli_arg: str, json_output: bool) -> str:
+    """Resolve the Firecrawl API key from --firecrawl-api-key, then
+    FIRECRAWL_API_KEY env, then (if interactive and not already configured)
+    prompt the user.
+
+    Returns the resolved key, or an empty string to signal 'skip install'.
+    """
+    import json as _json
+    import sys
+    from hyperresearch.core.firecrawl_mcp import existing_firecrawl_entry, resolve_api_key
+
+    resolved = resolve_api_key(cli_arg or None)
+    if resolved:
+        return resolved
+
+    if json_output or not sys.stdin.isatty():
+        return ""
+
+    claude_json_path = Path.home() / ".claude.json"
+    if claude_json_path.exists():
+        try:
+            data = _json.loads(claude_json_path.read_text(encoding="utf-8"))
+            if existing_firecrawl_entry(data.get("mcpServers", {})):
+                return ""
+        except _json.JSONDecodeError:
+            pass
+
+    from rich.prompt import Prompt
+
+    console.print()
+    console.print("[bold cyan]Firecrawl MCP — high-fidelity scrape + crawl + extract (optional)[/]")
+    console.print("[dim]With a Firecrawl key, agents can scrape JS-heavy pages, crawl[/]")
+    console.print("[dim]whole domains, extract structured data with custom schemas, and[/]")
+    console.print("[dim]combine search+content in one call. Get a key at https://firecrawl.dev[/]")
+    console.print("[dim]Press Enter to skip — pipeline still works with `{hpr_path} fetch` + Exa.[/]")
+    return Prompt.ask("  Firecrawl API key (blank to skip)", default="").strip()
+
+
+def _print_firecrawl_status(status: str, message: str) -> None:
+    """Pretty-print the Firecrawl MCP install result to the console."""
+    if status == "installed":
+        console.print(f"[green]Firecrawl MCP:[/] {message}")
+    elif status == "already_configured":
+        console.print(f"[dim]Firecrawl MCP:[/] {message}")
+    elif status == "skipped_no_key":
+        console.print(
+            "[dim]Firecrawl MCP:[/] skipped (no API key). "
+            "Re-run with --firecrawl-api-key <KEY> or set FIRECRAWL_API_KEY to enable. "
+            "Get a key at https://firecrawl.dev"
+        )
+    elif status == "skipped_no_npx":
+        console.print(f"[yellow]Firecrawl MCP:[/] {message}")
+    elif status == "skipped_no_claude_config":
+        console.print(f"[yellow]Firecrawl MCP:[/] {message}")
+    else:
+        console.print(f"[yellow]Firecrawl MCP:[/] {message}")
 
 
 def _print_reddit_status(status: str, message: str) -> None:

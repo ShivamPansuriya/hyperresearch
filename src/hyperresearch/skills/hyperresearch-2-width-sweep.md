@@ -75,6 +75,8 @@ Before spawning any fetchers, produce a **search plan** that maps the decomposit
    | Sub-Q2 | "Tesla Q3 2024 10-Q segment revenue" | filing | period-pinned | web_search_advanced_exa(category:"financial report", dates 2024-09..2024-12) | tabular |
    | Sub-Q1 | "China financial repression complaints" | reddit | adversarial | mcp__reddit__search(query:"China capital controls problem") | community |
    | Sub-Q3 | r/ChinaInvesting top of month | reddit | breadth | mcp__reddit__get_subreddit_posts(subreddit:"ChinaInvesting", sort:"top", time:"month") | current |
+   | Sub-Q2 | PBoC monetary policy releases index | firecrawl | depth | mcp__firecrawl__firecrawl_map(url:"www.pbc.gov.cn", search:"monetary policy") | site-exhaustive |
+   | Sub-Q2 | Tesla Q3 2024 10-Q structured line items | firecrawl | period-pinned | mcp__firecrawl__firecrawl_extract(urls:[10-Q PDF], schema:{segment_revenue, EBITDA, ...}) | structured |
    ```
 
    **Exa mode picker (use as your default routing table):**
@@ -98,7 +100,17 @@ Before spawning any fetchers, produce a **search plan** that maps the decomposit
 
    Add **at least 1 adversarial Reddit query per major lens** when the topic admits a community angle — Reddit discontent is the highest-signal source for "this vendor / framework / drug has problems the press isn't covering".
 
-   Plan typically has **40–100 planned searches** for a `full` query (Exa + academic + WebSearch + Reddit combined).
+   **Firecrawl mode picker (heavy-page / structured-data lens — use ALONGSIDE Exa, NEVER as a default):**
+   - **JS-heavy / SPA / paywall-fronted page that `{hpr_path} fetch` chokes on** → `mcp__firecrawl__firecrawl_scrape(url, waitFor: 2000, formats: ["markdown"])`
+   - **Bulk re-scrape of 10-100 known URLs** (e.g. all docs pages on a vendor site) → `mcp__firecrawl__firecrawl_batch_scrape(urls, formats: ["markdown"])` + poll with `firecrawl_check_batch_status`
+   - **Discover every URL on an authoritative domain** (regulator filings index, vendor docs, academic group publications) → `mcp__firecrawl__firecrawl_map(url, search: "<keyword>")`, then pick the load-bearing URLs and `batch_scrape` or `{hpr_path} fetch` them
+   - **Search the web AND get the full content of results in one call** → `mcp__firecrawl__firecrawl_search(query, scrapeOptions: {formats: ["markdown"]})` (use sparingly — saves search→fetch round trip)
+   - **Recursive crawl of a single domain** (forum, paginated blog, government portal without a sitemap) → `mcp__firecrawl__firecrawl_crawl(url, maxDepth: 2, limit: 50)` (credit-heavy — cap aggressively, poll with `firecrawl_check_crawl_status`)
+   - **Structured field extraction across multiple pages** (product specs, filing line items, vendor capability matrix, paper author/year/affiliation tuples) → `mcp__firecrawl__firecrawl_extract(urls, prompt, schema)` (the standout Firecrawl tool — no Exa or fetch path can do this)
+
+   Firecrawl is **additive**, not a default. Reach for it only when the topic explicitly needs JS-rendered pages, exhaustive site coverage, or structured fields. For ordinary article ingestion stick with `{hpr_path} fetch`.
+
+   Plan typically has **40–100 planned searches** for a `full` query (Exa + academic + WebSearch + Reddit + Firecrawl combined).
 
 4. **Search gap check.** Cross-check the search plan against `research/temp/coverage-matrix.md`. For every row in the coverage matrix, verify at least one search in the plan targets that query phrase's atomic item. Re-read the verbatim query and check: is there any significant topic, entity, or category in the query that has ZERO rows in the search plan?
 
@@ -126,14 +138,17 @@ Before spawning any fetchers, produce a **search plan** that maps the decomposit
    - `deep_search_exa` SPARINGLY for one-shot synthesized questions
    - `get_code_context_exa` if any query asks for code / API examples
    - `mcp__reddit__*` for any row in the plan with `Exa mode` starting `mcp__reddit__` (community / lived-experience / adversarial-from-users)
+   - `mcp__firecrawl__*` for any row with `Exa mode` starting `mcp__firecrawl__` (JS-heavy pages, exhaustive site coverage, structured extraction)
 
    If the Exa MCP isn't installed (`mcp__exa__*` tools return "not available" or "missing API key"), fall back to plain `WebSearch` — the search plan still executes, just with lower-signal results.
 
    If the Reddit MCP isn't installed (`mcp__reddit__*` tools return "not available"), fall back to `WebSearch` with `site:reddit.com` appended to the query — lower signal but still surfaces threads. Don't drop Reddit rows from the plan.
 
-   **Persist load-bearing Reddit threads** via `{hpr_path} fetch "<reddit-url>" --tag reddit --tag <topic> -j` so they enter the vault alongside any other source and count toward URL targets.
+   If the Firecrawl MCP isn't installed, fall back: `firecrawl_scrape` → `mcp__exa__crawling_exa(url)`; `firecrawl_search` → `mcp__exa__web_search_exa` + `{hpr_path} fetch`; `firecrawl_map` / `firecrawl_crawl` → drop the row and log it as un-fillable without Firecrawl; `firecrawl_extract` → fetch the page then prompt the model to extract fields manually (lower fidelity, but the only fallback).
 
-   Aim for **80–120 candidate URLs** before deduplication for `full` tier (Reddit thread URLs count).
+   **Persist load-bearing Reddit threads + Firecrawl scrape outputs** via `{hpr_path} fetch "<url>" --tag <provider> --tag <topic> -j` so they enter the vault alongside any other source and count toward URL targets. For `firecrawl_extract` outputs, persist the structured JSON via `{hpr_path} note new --body-file <path> --type extract --tag <topic>`.
+
+   Aim for **80–120 candidate URLs** before deduplication for `full` tier (Reddit + Firecrawl outputs count).
 
 3. **Build and deduplicate the master URL queue.** Remove exact-URL duplicates. Remove obvious junk domains. The deduplicated queue should have **60–100 URLs** for `full` tier.
 

@@ -46,6 +46,8 @@ Read these inputs:
    - `external_probe_hits`: URLs the corpus-critic already surfaced via its Exa or Reddit verification probe. These are pre-validated — fetch them first. Reddit thread URLs in this list MUST be fetched with `--tag reddit`.
    - `preferred_exa_category`: the `web_search_advanced_exa` category that best matches the gap type (`research paper`, `news`, `pdf`, `financial report`, `company`, `people`). Pass this hint to the spawned fetcher.
    - If `type == "community-counter-evidence"`: the gap is best filled via the Reddit MCP. Spawn the fetcher with a `reddit_search_hint` and `preferred_reddit_mode` (see step 4 spawn template below).
+   - If `type == "site-exhaustiveness"`: the gap is best filled via Firecrawl `map` + `batch_scrape`. Pass the root domain in `firecrawl_search_hint` and set `preferred_firecrawl_mode: "map"`.
+   - If `type == "structured-extract"`: the gap is structured fields the corpus has source pages for but no structured form. Pass the schema and target URLs; set `preferred_firecrawl_mode: "extract"`.
 
 4. **Run targeted fetch wave.** For each gap, generate 2-3 search queries and collect URLs. Spawn **2-4 fetchers** with the gap-filling URLs.
 
@@ -57,8 +59,11 @@ Read these inputs:
    - Adversarial / dissenting view → `mcp__exa__web_search_exa` with a noun-phrase ("blog post arguing against <claim>")
    - Open-ended discovery → `mcp__exa__web_search_exa`
    - **Community counter-evidence gap** (`type: "community-counter-evidence"` from corpus-critic, OR the gap is about real-user pain / lived experience / contested vendor claim) → `mcp__reddit__search` + `mcp__reddit__search_subreddit` (name the obvious subreddit). For a load-bearing thread also hint `mcp__reddit__get_post(post_id)` to pull the full comment tree. Always tell the fetcher to persist Reddit URLs via `{hpr_path} fetch --tag reddit`.
+   - **Site-exhaustiveness gap** (`type: "site-exhaustiveness"`, OR the corpus is missing pages from an authoritative domain) → `mcp__firecrawl__firecrawl_map(url, search)` to discover URLs, then `mcp__firecrawl__firecrawl_batch_scrape` on the most-relevant returned URLs. Persist scrape outputs via `{hpr_path} fetch --force`.
+   - **Structured-extract gap** (`type: "structured-extract"`, OR the corpus has the source pages but no structured fields — e.g. transcript without filing line items) → `mcp__firecrawl__firecrawl_extract(urls, prompt, schema)`. Persist the returned JSON as a note with `--type extract`.
+   - **JS-heavy / SPA / paywall-fronted gap** (the orchestrator tried `{hpr_path} fetch` and got broken content) → `mcp__firecrawl__firecrawl_scrape(url, waitFor: 2000, formats: ["markdown"])` then `{hpr_path} fetch --force` to persist.
 
-   The fetcher silently falls back to plain `WebSearch` if Exa isn't configured (and to `site:reddit.com` if Reddit MCP is unavailable) — never block on missing MCPs.
+   The fetcher silently falls back when MCPs are unavailable: Exa → `WebSearch`; Reddit → `site:reddit.com` via `WebSearch`; Firecrawl scrape → `mcp__exa__crawling_exa`; Firecrawl map / crawl → log the gap as un-fillable. Never block on missing MCPs.
 
    **Spawn template:**
    ```
@@ -83,6 +88,9 @@ Read these inputs:
      - preferred_exa_category: <research paper | news | pdf | financial report | company | people | none>
      - reddit_search_hint: <subreddits worth probing + the pain-flavoured query terms; "" to skip>
      - preferred_reddit_mode: <search | search_subreddit | get_subreddit_posts | get_post | none>
+     - firecrawl_search_hint: <natural-language description of the heavy-page / structured-extract / site-map task; "" to skip>
+     - preferred_firecrawl_mode: <scrape | batch_scrape | map | search | crawl | extract | none>
+     - firecrawl_extract_schema: <JSON schema if preferred_firecrawl_mode == "extract"; null otherwise>
    ```
 
    If the corpus-critic supplied `external_probe_hits`, include those URLs in the `urls` list FIRST — they're pre-validated by step 8's Exa probe and should land in the vault before the fetcher searches further.

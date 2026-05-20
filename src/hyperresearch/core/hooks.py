@@ -398,6 +398,22 @@ reading of the evidence.
    thread URL via the standard `{hpr_path} fetch` path so the orchestrator
    can cite it like any other source.
 
+   **Firecrawl hint for the fetcher.** The spawned fetcher also has
+   Firecrawl MCP tools (`firecrawl_scrape`, `firecrawl_batch_scrape`,
+   `firecrawl_map`, `firecrawl_search`, `firecrawl_crawl`,
+   `firecrawl_extract`). Add a `firecrawl_search_hint` field whenever
+   your locus matches one of these shapes:
+
+   - Locus needs content from a **JS-heavy / SPA / paywalled** page (LinkedIn, modern news outlet, vendor dashboard, regulator's interactive viewer) → hint `firecrawl_scrape(url, waitFor: 2000)` and tell the fetcher to call it BEFORE `{hpr_path} fetch`.
+   - Locus needs **exhaustive coverage of a specific authoritative site** (one regulator, one vendor's full docs, one academic group's full publications) → hint `firecrawl_map(url, search: <keyword>)` then `firecrawl_batch_scrape` on the most-relevant returned URLs.
+   - Locus needs **structured comparison data** across many pages (product specs, vendor capability matrices, filing line items, paper metadata) → hint `firecrawl_extract(urls, prompt, schema)` with the explicit JSON schema you want extracted.
+   - Locus needs **recursive crawl** of a single domain that doesn't expose a sitemap (forums, paginated blogs, government portals) → hint `firecrawl_crawl(url, maxDepth: 2, limit: 50)` with strict caps; warn the fetcher this is credit-heavy.
+   - Locus is satisfied by Exa search + plain `{hpr_path} fetch` → empty hint; don't escalate.
+
+   Firecrawl is **additive** to Exa/Reddit, not a replacement. Exa
+   finds candidate URLs; Firecrawl extracts hard pages or structured
+   fields. Pass both hints when both apply.
+
 5. **Read the fetched sources.** Use `{hpr_path} note show <id> -j`. Quote
    the passages that actually move your locus's argument. Do NOT paraphrase
    when a direct quote would be stronger evidence.
@@ -2614,7 +2630,7 @@ description: >
   secondary sources cite. Runs on Sonnet for better comprehension and
   judgment. Spawn multiple in parallel for bulk research.
 model: sonnet
-tools: Bash, Read, Write, WebSearch, mcp__exa__web_search_exa, mcp__exa__web_search_advanced_exa, mcp__exa__deep_search_exa, mcp__exa__get_code_context_exa, mcp__exa__crawling_exa, mcp__reddit__search, mcp__reddit__search_subreddit, mcp__reddit__get_post, mcp__reddit__get_subreddit_posts
+tools: Bash, Read, Write, WebSearch, mcp__exa__web_search_exa, mcp__exa__web_search_advanced_exa, mcp__exa__deep_search_exa, mcp__exa__get_code_context_exa, mcp__exa__crawling_exa, mcp__reddit__search, mcp__reddit__search_subreddit, mcp__reddit__get_post, mcp__reddit__get_subreddit_posts, mcp__firecrawl__firecrawl_scrape, mcp__firecrawl__firecrawl_batch_scrape, mcp__firecrawl__firecrawl_check_batch_status, mcp__firecrawl__firecrawl_map, mcp__firecrawl__firecrawl_search, mcp__firecrawl__firecrawl_crawl, mcp__firecrawl__firecrawl_check_crawl_status, mcp__firecrawl__firecrawl_extract
 color: blue
 ---
 
@@ -2995,7 +3011,188 @@ PYTHONIOENCODING=utf-8 {hpr_path} fetch "<reddit-url>" --tag reddit --tag <topic
 - Precise numbers from official filings → Exa `category: "financial report"` or fetch the filing directly.
 - Anything where the topic is so niche that no relevant subreddit exists — search will return noise; don't force it.
 
-### 5. `{hpr_path} fetch <url>` — THE PERSISTENCE PATH
+### 5. `mcp__firecrawl__*` — high-fidelity scrape, crawl, structured extract
+
+Firecrawl is the **content extraction specialist**. Where Exa finds URLs
+and where `{hpr_path} fetch` does best-effort HTML→markdown via the
+configured provider, Firecrawl runs a hosted headless-browser pipeline
+that handles JavaScript-heavy SPAs, bypasses common anti-bot walls,
+returns clean markdown, can crawl whole sites, and can extract
+**structured data via a JSON schema** the LLM enforces.
+
+Think of the relationship as:
+
+- **Exa** = search engine (returns URLs + snippets).
+- **`{hpr_path} fetch`** = your default ingestion path (cheap, works for
+  most pages, persists into the vault).
+- **Firecrawl** = the heavy artillery you reach for when (a) the page is
+  JS-heavy / paywalled / anti-bot'd and `{hpr_path} fetch` returns junk,
+  (b) you need to crawl a whole site, or (c) you need **structured
+  fields** extracted (table rows, product attributes, filing line items)
+  rather than just the markdown body.
+
+#### `mcp__firecrawl__firecrawl_scrape` — one URL → clean markdown
+
+Single-URL scrape with full headless-browser rendering. Use when:
+
+- `{hpr_path} fetch "<url>"` returned visibly broken content (404 page
+  body, "JavaScript required" placeholder, login wall on a public
+  resource, mojibake), OR
+- The URL is a known SPA or dashboard (LinkedIn, Twitter, modern news
+  outlets, vendor product pages) that doesn't render server-side, OR
+- You want to apply Firecrawl's per-page actions (wait, scroll, click)
+  before the markdown is extracted.
+
+```
+mcp__firecrawl__firecrawl_scrape(
+  url: "<url>",
+  formats: ["markdown"],         # also: "html", "links", "screenshot"
+  onlyMainContent: true,
+  waitFor: 2000                  # ms to let JS render
+)
+```
+
+After you get clean markdown, **still persist it via `{hpr_path} fetch`**
+with `--force` so the note enters the vault with provenance. Or, if
+fetch keeps failing on that URL, paste the load-bearing 1-2 paragraphs
+into your report (the note will be un-vault-able).
+
+#### `mcp__firecrawl__firecrawl_batch_scrape` + `firecrawl_check_batch_status`
+
+Use when you already have **a list of URLs** (10-100) and you want them
+all rendered the same way at once. Cheaper than one scrape per call and
+returns a batch job id you poll with `firecrawl_check_batch_status`.
+
+```
+mcp__firecrawl__firecrawl_batch_scrape(urls: [...], formats: ["markdown"])
+```
+
+Typical case: a width-sweep wave where the orchestrator handed you 20
+URLs that are all known SPAs (e.g. a vendor's docs portal).
+
+#### `mcp__firecrawl__firecrawl_map` — discover a site's URL graph
+
+Returns the full list of indexed URLs on a domain. Use when:
+
+- You want exhaustive coverage of a specific authoritative site (a
+  regulator's filings index, a vendor's complete docs, an academic
+  group's publications page), OR
+- The depth investigator's locus is "what does <org> say about
+  <topic>" and you need to find every page on their domain that
+  could contain the answer.
+
+```
+mcp__firecrawl__firecrawl_map(url: "<root-url>", search: "<keyword>")
+```
+
+`map` returns just URLs (no content). Pair it with `batch_scrape` or
+`{hpr_path} fetch` to actually pull the load-bearing pages.
+
+#### `mcp__firecrawl__firecrawl_search` — search the web AND extract content
+
+This is the one place Firecrawl genuinely overlaps with Exa: a web
+search that **also returns the full content** of each result, not just
+URLs + snippets. Use when:
+
+- You want a low-volume "give me 3-5 pages with their full text on
+  topic X" call (saves a search→fetch round trip), OR
+- Exa is unavailable / your query is best phrased as a literal Google-
+  style search, OR
+- You need a quick fact-check where Exa would be overkill but you also
+  don't want to scrape result pages one at a time.
+
+```
+mcp__firecrawl__firecrawl_search(query: "<query>", limit: 5, scrapeOptions: {{formats: ["markdown"]}})
+```
+
+When Exa is configured, prefer Exa for discovery (better neural
+ranking) and reach for `firecrawl_search` only when you also want the
+page bodies inline.
+
+#### `mcp__firecrawl__firecrawl_crawl` + `firecrawl_check_crawl_status`
+
+Asynchronous **recursive** crawl of a domain (follows links, depth-
+controlled, page-limited). Use when:
+
+- You need many pages from a single site that are not enumerable via
+  `map`'s sitemap-style discovery (forums, blogs, regulator sites with
+  paginated indexes), OR
+- The locus's primary source is structured across many pages of the
+  same site and you want everything.
+
+```
+mcp__firecrawl__firecrawl_crawl(
+  url: "<root>",
+  maxDepth: 2,
+  limit: 50,
+  scrapeOptions: {{formats: ["markdown"], onlyMainContent: true}}
+)
+```
+
+`crawl` returns a job id immediately; poll with
+`firecrawl_check_crawl_status(id)` until it completes. **Cap aggressively** — full crawls
+are credit-heavy. Use `map` first if you can name the pages you want.
+
+#### `mcp__firecrawl__firecrawl_extract` — structured data via LLM + schema
+
+This is the standout tool. Pass one or more URLs and a JSON schema;
+Firecrawl returns structured records matching the schema. Use when:
+
+- You need **table-like data**: SEC filing line items, product specs,
+  team rosters, paper authors+affiliations+years, pricing tiers, a
+  list of vendors comparing on the same attributes.
+- You want to extract the same fields across many pages consistently —
+  far cheaper than asking the model to re-read each markdown body.
+
+```
+mcp__firecrawl__firecrawl_extract(
+  urls: ["<url1>", "<url2>"],
+  prompt: "Extract product name, price, key features, and limitations.",
+  schema: {{
+    "type": "object",
+    "properties": {{
+      "name":   {{"type": "string"}},
+      "price":  {{"type": "string"}},
+      "features": {{"type": "array", "items": {{"type": "string"}}}},
+      "limitations": {{"type": "array", "items": {{"type": "string"}}}}
+    }},
+    "required": ["name"]
+  }}
+)
+```
+
+Persist the extracted JSON via `{hpr_path} note new --body-file ...` so
+the structured record is in the vault for downstream synthesis / the
+comparisons step.
+
+#### NOT USED: `firecrawl_agent` / `firecrawl_agent_status`
+
+Do not invoke Firecrawl's autonomous research agent. THIS pipeline IS
+the agent; calling it would double-spend, run an opaque sub-pipeline,
+and produce a synthesized answer the orchestrator can't audit. Use the
+explicit primitives (`scrape`, `search`, `crawl`, `extract`) instead.
+
+#### NOT USED: `firecrawl_browser_*`, `firecrawl_interact`, `firecrawl_search_feedback`
+
+The browser session tools are deprecated upstream (Firecrawl's docs
+recommend `scrape + interact` if you need it; for our use case
+`scrape(waitFor / actions)` covers the rare interactive page). Skip
+`search_feedback` — that's a credit-refund mechanism, not research.
+
+#### When Firecrawl is the right tool — quick test
+
+Ask: **"do I need clean content from a hard page, or structured
+fields, or a whole site?"** If yes → Firecrawl. If you just need URLs
+or snippets → Exa. If you have a URL that `{hpr_path} fetch` already
+handles → don't escalate.
+
+If the Firecrawl MCP returns "tool not available" or "missing API key",
+the agent silently falls back: `crawling_exa` for the scrape case,
+`{hpr_path} fetch` for the persistence case, plain manual prompting
+for the structured-extract case. Don't block on a missing Firecrawl
+configuration.
+
+### 6. `{hpr_path} fetch <url>` — THE PERSISTENCE PATH
 
 ALL search results need to enter the vault before they count. After ANY
 of the search tools above returns a URL you want, fetch it with:
@@ -3026,6 +3223,12 @@ fetched is invisible to the next pipeline step.
 | What practitioners are discussing *right now*                      | `mcp__reddit__get_subreddit_posts(subreddit, sort: "top", time: "month")`         |
 | Full thread + comment tree from a load-bearing Reddit post         | `mcp__reddit__get_post(post_id)`, then persist via `{hpr_path} fetch`             |
 | Adversarial search ("limitations of X", "criticism of X")          | `mcp__reddit__search` + `mcp__exa__web_search_advanced_exa` together              |
+| `{hpr_path} fetch` returned broken / JS-not-rendered content       | `mcp__firecrawl__firecrawl_scrape(url, waitFor: 2000)`                            |
+| Many URLs from the same SPA / docs portal, want them all rendered  | `mcp__firecrawl__firecrawl_batch_scrape(urls, formats:["markdown"])`              |
+| Need every URL on a domain (sitemap-style discovery)               | `mcp__firecrawl__firecrawl_map(url, search:"<keyword>")`                          |
+| Search + full content in one call (skip search→fetch round trip)   | `mcp__firecrawl__firecrawl_search(query, scrapeOptions:{{formats:["markdown"]}})`   |
+| Recursive multi-page crawl of one domain                           | `mcp__firecrawl__firecrawl_crawl(url, maxDepth:2, limit:50)` (poll with status)   |
+| Structured table-like fields across multiple pages (specs, filings) | `mcp__firecrawl__firecrawl_extract(urls, prompt, schema)`                         |
 | URL in hand, ready to ingest into vault                            | `{hpr_path} fetch "<url>"`                                                        |
 
 ## Phase 1: Fetch assigned URLs
@@ -3184,7 +3387,7 @@ description: >
   high-leverage missing sources. Runs on Sonnet. Spawn ONCE before
   drafting, after Layer 3.5 comparisons.
 model: sonnet
-tools: Bash, Read, Write, WebSearch, mcp__exa__web_search_exa, mcp__exa__web_search_advanced_exa, mcp__exa__deep_search_exa, mcp__reddit__search, mcp__reddit__search_subreddit, mcp__reddit__get_post
+tools: Bash, Read, Write, WebSearch, mcp__exa__web_search_exa, mcp__exa__web_search_advanced_exa, mcp__exa__deep_search_exa, mcp__reddit__search, mcp__reddit__search_subreddit, mcp__reddit__get_post, mcp__firecrawl__firecrawl_search, mcp__firecrawl__firecrawl_map, mcp__firecrawl__firecrawl_extract
 color: teal
 ---
 
@@ -3297,6 +3500,30 @@ to drafting.
      )
      ```
 
+   - For a **site-exhaustiveness gap** (e.g. "every position on FRMCS
+     by ETSI" or "every product page on vendor.com"), probe Firecrawl's
+     map:
+     ```
+     mcp__firecrawl__firecrawl_map(url: "<root-domain>", search: "<keyword>")
+     ```
+     If pages turn up that the vault doesn't have, flag a fetch gap with
+     those URLs in `external_probe_hits`. The gap-fetch wave in step 13
+     will batch-scrape them.
+
+   - For a **structured-data gap** (e.g. "we need filing line items
+     for Tesla Q3 2024 and the vault only has the earnings-call
+     transcript"), probe Firecrawl's extract:
+     ```
+     mcp__firecrawl__firecrawl_extract(
+       urls: ["<candidate filing URL>"],
+       prompt: "Extract <fields>",
+       schema: { ... }
+     )
+     ```
+     If extract returns the fields, the gap is real and the fetcher
+     should use the same call in step 13. If extract returns nothing,
+     the gap is genuinely missing — flag it confidently.
+
    - For a **community / lived-experience gap** (a position is supported
      only by vendor docs, analyst write-ups, or press; you want to check
      whether real users / practitioners contradict it), probe Reddit:
@@ -3330,7 +3557,7 @@ to drafting.
    {{
      "gaps": [
        {{
-         "type": "overturning|strengthening|independent-verification|community-counter-evidence",
+         "type": "overturning|strengthening|independent-verification|community-counter-evidence|site-exhaustiveness|structured-extract",
          "target_position": "which claim/position this source would test",
          "search_queries": ["2-3 specific search queries — natural-language describing the ideal page; the gap-fetch step in step 13 will feed these into mcp__exa__web_search_advanced_exa"],
          "preferred_exa_category": "research paper|news|pdf|company|people|financial report|none",
