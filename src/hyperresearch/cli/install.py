@@ -30,11 +30,17 @@ def install(
         "--exa-api-key",
         help="Exa MCP API key (https://exa.ai). If omitted, falls back to the EXA_API_KEY environment variable. If neither is set, the Exa MCP install step is skipped silently — the pipeline still works using WebSearch + academic APIs.",
     ),
+    no_reddit: bool = typer.Option(
+        False,
+        "--no-reddit",
+        help="Skip installing the Reddit MCP server (eliasbiondo/reddit-no-auth-mcp-server). By default the installer adds it to ~/.claude.json so agents can read real-world community discussion. Requires `uvx` (Astral uv) on PATH; otherwise skipped automatically with a hint.",
+    ),
 ) -> None:
     """Install hyperresearch: init vault + inject CLAUDE.md + install Claude Code hooks."""
     import sys
 
     from hyperresearch.core.exa_mcp import install_exa_mcp
+    from hyperresearch.core.reddit_mcp import install_reddit_mcp
     from hyperresearch.core.hooks import (
         _install_hyperresearch_step_skills,
         install_global_hooks,
@@ -101,6 +107,9 @@ def install(
         # is available — the pipeline still works with WebSearch only.
         resolved_key = _resolve_exa_key_with_optional_prompt(exa_api_key, json_output)
         exa_status, exa_message = install_exa_mcp(resolved_key or None)
+        # Reddit MCP: no API key needed; install unconditionally unless --no-reddit
+        # was passed or uvx is missing (in which case skip with a hint).
+        reddit_status, reddit_message = install_reddit_mcp(skip=no_reddit)
 
         if json_output:
             output(
@@ -112,6 +121,7 @@ def install(
                         "prd_skills_installed": prd_result["skills_installed"],
                         "prd_agents_installed": prd_result["agents_installed"],
                         "exa_mcp": {"status": exa_status, "message": exa_message},
+                        "reddit_mcp": {"status": reddit_status, "message": reddit_message},
                     },
                     vault=None,
                 ),
@@ -130,6 +140,7 @@ def install(
             f"{len(prd_result['agents_installed'])} agents installed globally."
         )
         _print_exa_status(exa_status, exa_message)
+        _print_reddit_status(reddit_status, reddit_message)
         console.print(
             "\n[bold]Ready.[/] /hyperresearch and /hyperresearch-prd are now available in every Claude Code session."
         )
@@ -190,6 +201,10 @@ def install(
     resolved_key = _resolve_exa_key_with_optional_prompt(exa_api_key, json_output)
     exa_status, exa_message = install_exa_mcp(resolved_key or None)
 
+    # Step 4d: Reddit MCP — community-driven discovery (no API key required).
+    # Install unconditionally unless --no-reddit was passed or uvx is missing.
+    reddit_status, reddit_message = install_reddit_mcp(skip=no_reddit)
+
     # Step 5: Report
     data = {
         "vault_path": str(vault.root),
@@ -200,6 +215,7 @@ def install(
         "prd_agents_installed": prd_result["agents_installed"],
         "crawl4ai": crawl4ai_status,
         "exa_mcp": {"status": exa_status, "message": exa_message},
+        "reddit_mcp": {"status": reddit_status, "message": reddit_message},
     }
 
     if json_output:
@@ -238,6 +254,7 @@ def install(
             )
 
         _print_exa_status(exa_status, exa_message)
+        _print_reddit_status(reddit_status, reddit_message)
 
         console.print("\n[bold]Ready.[/] Agents will now check the research base before web searches.")
         console.print(
@@ -317,6 +334,22 @@ def _print_exa_status(status: str, message: str) -> None:
         console.print(f"[yellow]Exa MCP:[/] {message}")
     else:
         console.print(f"[yellow]Exa MCP:[/] {message}")
+
+
+def _print_reddit_status(status: str, message: str) -> None:
+    """Pretty-print the Reddit MCP install result to the console."""
+    if status == "installed":
+        console.print(f"[green]Reddit MCP:[/] {message}")
+    elif status == "already_configured":
+        console.print(f"[dim]Reddit MCP:[/] {message}")
+    elif status == "skipped_no_uvx":
+        console.print(f"[yellow]Reddit MCP:[/] {message}")
+    elif status == "skipped_by_flag":
+        console.print("[dim]Reddit MCP:[/] skipped (--no-reddit)")
+    elif status == "skipped_no_claude_config":
+        console.print(f"[yellow]Reddit MCP:[/] {message}")
+    else:
+        console.print(f"[yellow]Reddit MCP:[/] {message}")
 
 
 def _setup_crawl4ai(vault) -> str:

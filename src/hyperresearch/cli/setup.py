@@ -131,6 +131,7 @@ def setup(
 
     from hyperresearch.core.agent_docs import _resolve_executable, inject_agent_docs
     from hyperresearch.core.exa_mcp import install_exa_mcp
+    from hyperresearch.core.reddit_mcp import install_reddit_mcp
     from hyperresearch.core.hooks import install_hooks
     from hyperresearch.core.vault import Vault, VaultError
 
@@ -173,6 +174,17 @@ def setup(
         console.print("  [dim]Exa MCP:[/] skipped — re-run setup to add a key later")
     else:
         console.print(f"  [yellow]Exa MCP:[/] {exa_message}")
+
+    # Install Reddit MCP entry — no API key required. Runs via uvx (Astral uv).
+    reddit_status, reddit_message = install_reddit_mcp()
+    if reddit_status == "installed":
+        console.print(f"  [green]Reddit MCP:[/] {reddit_message}")
+    elif reddit_status == "already_configured":
+        console.print(f"  [dim]Reddit MCP:[/] {reddit_message}")
+    elif reddit_status == "skipped_no_uvx":
+        console.print(f"  [yellow]Reddit MCP:[/] {reddit_message}")
+    else:
+        console.print(f"  [yellow]Reddit MCP:[/] {reddit_message}")
 
     # Install browser if needed
     if use_crawl4ai:

@@ -279,6 +279,42 @@ If no key is supplied (no `--exa-api-key`, no `EXA_API_KEY`, blank at the setup 
 
 The installer is idempotent: if any `exa*` MCP entry already exists in `~/.claude.json`, it's left unchanged.
 
+### Reddit MCP (real-world voice + community pain)
+
+The fetcher, corpus-critic, and depth-investigator agents also support the [Reddit MCP server](https://github.com/eliasbiondo/reddit-mcp-server) — a no-auth Reddit reader that exposes the lived experience that academic sources and indexed search miss: developer-tool footguns, product complaints, medical side-effect reports, hiring-market reality, DIY workarounds for closed-vendor limitations, "what's hot right now" community signals.
+
+When configured, agents call:
+
+- `mcp__reddit__search` — query across all of Reddit (discovery — surfaces which subreddits are loudest on the topic).
+- `mcp__reddit__search_subreddit` — focused search inside a specific community (`r/MachineLearning`, `r/sysadmin`, etc.) for genuine technical depth.
+- `mcp__reddit__get_subreddit_posts` — top / hot posts in a community right now (for "what are practitioners discussing this month" angles).
+- `mcp__reddit__get_post` — the full comment tree of a load-bearing thread (where the actual expertise usually lives, not the OP).
+
+The corpus-critic uses Reddit as a counter-evidence probe: when a committed position rests on vendor docs, analyst write-ups, or press, it cross-checks against user-community discussion. If practitioners contradict the position, the critic flags a `community-counter-evidence` gap for the step-13 fetch wave.
+
+**Setup.** The install command adds the Reddit MCP entry to `~/.claude.json` automatically — no API key, no OAuth, no browser:
+
+```bash
+hyperresearch install --global        # installs Reddit MCP unless --no-reddit is passed
+hyperresearch install --global --no-reddit   # opt out
+```
+
+The installer adds this entry (stdio transport via [Astral uv](https://docs.astral.sh/uv/)):
+
+```json
+"reddit": {
+  "type": "stdio",
+  "command": "uvx",
+  "args": ["reddit-no-auth-mcp-server"]
+}
+```
+
+`uvx` ships with `uv` (`curl -LsSf https://astral.sh/uv/install.sh | sh`). If `uvx` is not on PATH the Reddit install step is skipped with a hint — install uv and re-run `hyperresearch install`.
+
+The pipeline still works without Reddit configured — agents fall back to `site:reddit.com` via `WebSearch`. The Reddit MCP just makes that lookup higher-signal (full comment trees, subreddit-focused search, sort-by-recency).
+
+The installer is idempotent: if any `reddit*` MCP entry already exists in `~/.claude.json`, it's left unchanged.
+
 ---
 
 ## What it doesn't do

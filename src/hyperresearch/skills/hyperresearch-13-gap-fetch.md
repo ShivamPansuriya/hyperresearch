@@ -43,8 +43,9 @@ Read these inputs:
    If 0 fetch-worthy gaps: log "no gaps to fill" and proceed directly to step 14.
 
    **If `research/corpus-critic-gaps.json` exists from step 8**, read it. Each gap entry there may carry:
-   - `external_probe_hits`: URLs the corpus-critic already surfaced via its Exa verification probe. These are pre-validated — fetch them first.
+   - `external_probe_hits`: URLs the corpus-critic already surfaced via its Exa or Reddit verification probe. These are pre-validated — fetch them first. Reddit thread URLs in this list MUST be fetched with `--tag reddit`.
    - `preferred_exa_category`: the `web_search_advanced_exa` category that best matches the gap type (`research paper`, `news`, `pdf`, `financial report`, `company`, `people`). Pass this hint to the spawned fetcher.
+   - If `type == "community-counter-evidence"`: the gap is best filled via the Reddit MCP. Spawn the fetcher with a `reddit_search_hint` and `preferred_reddit_mode` (see step 4 spawn template below).
 
 4. **Run targeted fetch wave.** For each gap, generate 2-3 search queries and collect URLs. Spawn **2-4 fetchers** with the gap-filling URLs.
 
@@ -55,8 +56,9 @@ Read these inputs:
    - Government filing / regulatory gap → `mcp__exa__web_search_advanced_exa(category: "pdf" or "financial report")`
    - Adversarial / dissenting view → `mcp__exa__web_search_exa` with a noun-phrase ("blog post arguing against <claim>")
    - Open-ended discovery → `mcp__exa__web_search_exa`
+   - **Community counter-evidence gap** (`type: "community-counter-evidence"` from corpus-critic, OR the gap is about real-user pain / lived experience / contested vendor claim) → `mcp__reddit__search` + `mcp__reddit__search_subreddit` (name the obvious subreddit). For a load-bearing thread also hint `mcp__reddit__get_post(post_id)` to pull the full comment tree. Always tell the fetcher to persist Reddit URLs via `{hpr_path} fetch --tag reddit`.
 
-   The fetcher silently falls back to plain `WebSearch` if Exa isn't configured — never block on missing Exa.
+   The fetcher silently falls back to plain `WebSearch` if Exa isn't configured (and to `site:reddit.com` if Reddit MCP is unavailable) — never block on missing MCPs.
 
    **Spawn template:**
    ```
@@ -79,6 +81,8 @@ Read these inputs:
      - exa_search_hint: <natural-language description of the ideal page>
      - preferred_exa_mode: <web_search_exa | web_search_advanced_exa | deep_search_exa | get_code_context_exa>
      - preferred_exa_category: <research paper | news | pdf | financial report | company | people | none>
+     - reddit_search_hint: <subreddits worth probing + the pain-flavoured query terms; "" to skip>
+     - preferred_reddit_mode: <search | search_subreddit | get_subreddit_posts | get_post | none>
    ```
 
    If the corpus-critic supplied `external_probe_hits`, include those URLs in the `urls` list FIRST — they're pre-validated by step 8's Exa probe and should land in the vault before the fetcher searches further.

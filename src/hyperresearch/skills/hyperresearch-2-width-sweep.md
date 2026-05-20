@@ -73,6 +73,8 @@ Before spawning any fetchers, produce a **search plan** that maps the decomposit
    | Sub-Q1 | "financial repression China scholarly analysis" | academic | depth | web_search_advanced_exa(category:"research paper") | canonical |
    | Entity: PE | "China private equity returns academic study" | academic | depth | API:SemanticScholar -> web_search_advanced_exa(category:"research paper") | canonical |
    | Sub-Q2 | "Tesla Q3 2024 10-Q segment revenue" | filing | period-pinned | web_search_advanced_exa(category:"financial report", dates 2024-09..2024-12) | tabular |
+   | Sub-Q1 | "China financial repression complaints" | reddit | adversarial | mcp__reddit__search(query:"China capital controls problem") | community |
+   | Sub-Q3 | r/ChinaInvesting top of month | reddit | breadth | mcp__reddit__get_subreddit_posts(subreddit:"ChinaInvesting", sort:"top", time:"month") | current |
    ```
 
    **Exa mode picker (use as your default routing table):**
@@ -83,8 +85,20 @@ Before spawning any fetchers, produce a **search plan** that maps the decomposit
    - **Period-pinned regulatory filings (SEC, Companies House)** → `web_search_advanced_exa(category: "financial report" | "pdf")` with the exact period as `startPublishedDate` / `endPublishedDate`
    - **Adversarial / contrarian** → `web_search_exa` with the adversarial query as a noun-phrase ("blog post arguing X is wrong")
    - **Academic literature** → academic APIs FIRST via plain `Bash` + `curl`, THEN `web_search_advanced_exa(category: "research paper")` to backfill
+   - **Real-world user pain / lived experience / community workarounds** → Reddit MCP (see picker below)
+   - **"What is the community discussing about <topic> right now"** → Reddit MCP
 
-   Plan typically has **40–100 planned searches** for a `full` query.
+   **Reddit mode picker (community lens — use ALONGSIDE Exa, not instead of):**
+   - **Discovery across all of Reddit** (you don't yet know which subreddit) → `mcp__reddit__search(query: "<topic> problem OR issue OR switching")`
+   - **Focused search inside a known subreddit** → `mcp__reddit__search_subreddit(subreddit, query)`
+   - **What's hot/top in a community right now** → `mcp__reddit__get_subreddit_posts(subreddit, sort: "top", time: "month")`
+   - **Pull a thread's full comment tree** (after search returns a load-bearing candidate) → `mcp__reddit__get_post(post_id)`
+
+   Reddit is **mandatory** for any topic that touches: developer tools, consumer products, software framework adoption, medical / drug side-effects, hiring / compensation reality, emerging-tech adoption, DIY workarounds for closed-vendor limitations, or genuine populist sentiment. Skip Reddit only for pure-academic methodology questions and for topics so niche no relevant subreddit exists.
+
+   Add **at least 1 adversarial Reddit query per major lens** when the topic admits a community angle — Reddit discontent is the highest-signal source for "this vendor / framework / drug has problems the press isn't covering".
+
+   Plan typically has **40–100 planned searches** for a `full` query (Exa + academic + WebSearch + Reddit combined).
 
 4. **Search gap check.** Cross-check the search plan against `research/temp/coverage-matrix.md`. For every row in the coverage matrix, verify at least one search in the plan targets that query phrase's atomic item. Re-read the verbatim query and check: is there any significant topic, entity, or category in the query that has ZERO rows in the search plan?
 
@@ -111,10 +125,15 @@ Before spawning any fetchers, produce a **search plan** that maps the decomposit
    - `web_search_advanced_exa` for any query that needs a date filter, domain whitelist, or category target (Lens B canonical + Lens D period-pinned)
    - `deep_search_exa` SPARINGLY for one-shot synthesized questions
    - `get_code_context_exa` if any query asks for code / API examples
+   - `mcp__reddit__*` for any row in the plan with `Exa mode` starting `mcp__reddit__` (community / lived-experience / adversarial-from-users)
 
    If the Exa MCP isn't installed (`mcp__exa__*` tools return "not available" or "missing API key"), fall back to plain `WebSearch` — the search plan still executes, just with lower-signal results.
 
-   Aim for **80–120 candidate URLs** before deduplication for `full` tier.
+   If the Reddit MCP isn't installed (`mcp__reddit__*` tools return "not available"), fall back to `WebSearch` with `site:reddit.com` appended to the query — lower signal but still surfaces threads. Don't drop Reddit rows from the plan.
+
+   **Persist load-bearing Reddit threads** via `{hpr_path} fetch "<reddit-url>" --tag reddit --tag <topic> -j` so they enter the vault alongside any other source and count toward URL targets.
+
+   Aim for **80–120 candidate URLs** before deduplication for `full` tier (Reddit thread URLs count).
 
 3. **Build and deduplicate the master URL queue.** Remove exact-URL duplicates. Remove obvious junk domains. The deduplicated queue should have **60–100 URLs** for `full` tier.
 

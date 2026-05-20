@@ -372,6 +372,32 @@ reading of the evidence.
    The fetcher silently falls back to plain `WebSearch` when the Exa
    MCP isn't configured — pass the hints regardless.
 
+   **Reddit hint for the fetcher.** The spawned fetcher also has Reddit
+   MCP tools (`mcp__reddit__search`, `mcp__reddit__search_subreddit`,
+   `mcp__reddit__get_subreddit_posts`, `mcp__reddit__get_post`) for
+   reaching the real-world / community angle of your locus. Pass a
+   `reddit_search_hint` field whenever the locus touches:
+
+   - **User-facing product / framework / tool** → name the obvious
+     subreddit(s) (e.g. `r/<product>`, `r/programming`,
+     `r/MachineLearning`, `r/sysadmin`) and hint
+     `mcp__reddit__search_subreddit` with a pain-flavoured query
+     (`problem`, `issue`, `switching from`, `disappointed`, `migrate`).
+   - **"What's new" / "emerging adoption"** → hint
+     `mcp__reddit__get_subreddit_posts(sort: "top", time: "month")` on
+     the closest community subreddit.
+   - **Hot debate / contested claim** → hint `mcp__reddit__search` on
+     the topic plus adversarial terms ("limitations", "criticism",
+     "broken", "vs alternatives"). The full comment tree of a load-
+     bearing thread is usually where the actual technical depth lives —
+     hint `mcp__reddit__get_post` after search returns a candidate.
+   - **Pure academic / theoretical** → skip Reddit; pass an empty hint.
+
+   Reddit complements (does not replace) the canonical sources Exa
+   and academic APIs surface. The fetcher should fetch the Reddit
+   thread URL via the standard `{hpr_path} fetch` path so the orchestrator
+   can cite it like any other source.
+
 5. **Read the fetched sources.** Use `{hpr_path} note show <id> -j`. Quote
    the passages that actually move your locus's argument. Do NOT paraphrase
    when a direct quote would be stronger evidence.
@@ -2588,7 +2614,7 @@ description: >
   secondary sources cite. Runs on Sonnet for better comprehension and
   judgment. Spawn multiple in parallel for bulk research.
 model: sonnet
-tools: Bash, Read, Write, WebSearch, mcp__exa__web_search_exa, mcp__exa__web_search_advanced_exa, mcp__exa__deep_search_exa, mcp__exa__get_code_context_exa, mcp__exa__crawling_exa
+tools: Bash, Read, Write, WebSearch, mcp__exa__web_search_exa, mcp__exa__web_search_advanced_exa, mcp__exa__deep_search_exa, mcp__exa__get_code_context_exa, mcp__exa__crawling_exa, mcp__reddit__search, mcp__reddit__search_subreddit, mcp__reddit__get_post, mcp__reddit__get_subreddit_posts
 color: blue
 ---
 
@@ -2869,7 +2895,107 @@ Use the built-in `WebSearch` tool ONLY if:
 When Exa is configured, prefer it over `WebSearch` for everything except
 the simplest lookups — Exa's neural results are higher signal per request.
 
-### 4. `{hpr_path} fetch <url>` — THE PERSISTENCE PATH
+### 4. `mcp__reddit__*` — community voice + real-world problems
+
+The Reddit MCP (`mcp__reddit__search`, `mcp__reddit__search_subreddit`,
+`mcp__reddit__get_post`, `mcp__reddit__get_subreddit_posts`) reaches what
+no academic or news source can: the lived experience of users, hobbyists,
+practitioners, and small-business owners as they hit problems in real
+time. This is your bridge to the real world.
+
+When the research_query is about anything that touches **how people
+actually use, suffer with, or work around** a technology, product,
+practice, drug, regulation, framework, or workflow — Reddit is mandatory.
+You will miss the actual story without it. Examples that demand Reddit
+coverage:
+
+- Developer-tool / framework adoption, footguns, migration pain, "X vs Y"
+- Consumer products: complaints, defect patterns, real-world durability
+- Medical: side-effect prevalence, off-label use, patient communities
+- Job-market / hiring / compensation reality (vs. press-release claims)
+- Emerging tech: what early adopters are actually doing right now
+- DIY / open-community workarounds for closed-vendor limitations
+- Sentiment that is genuinely populist, not surfaced by SEO-optimised blogs
+
+#### `mcp__reddit__search` — query across all of Reddit
+
+Use when you do NOT yet know which subreddits are relevant. The MCP
+returns top posts across all of Reddit matching the query. Use this
+FIRST to discover which subreddits are the loudest on your topic, then
+pivot to `search_subreddit` for depth.
+
+```
+mcp__reddit__search(query: "<topic> problem | issue | broken | switching from")
+```
+
+Pro tips:
+- Append boolean-flavoured terms like `problem`, `issue`, `bug`,
+  `disappointed`, `switching away`, `vs`, `versus`, `migrate from` to
+  surface pain rather than evangelism.
+- For "what's new" sweeps add `since 2025` / `2026` to the query — Reddit
+  search treats those as relevance signals, not strict filters.
+
+#### `mcp__reddit__search_subreddit` — focused search inside a community
+
+Once you've identified relevant subreddits (e.g. `r/programming`,
+`r/MachineLearning`, `r/personalfinance`, `r/legaladvice`,
+`r/<product-name>`), search them directly:
+
+```
+mcp__reddit__search_subreddit(subreddit: "MachineLearning", query: "<query>")
+```
+
+This is where genuine technical depth lives — flaired-expert posts,
+followups, and contested threads. Prefer this over broad search whenever
+you can name a relevant subreddit.
+
+#### `mcp__reddit__get_subreddit_posts` — read what the community is talking about *now*
+
+For "what's new", "what are practitioners discussing this month",
+"emerging trends" angles, listing the subreddit directly (sorted `hot`
+or `top` by week / month) gives a snapshot of live community attention.
+
+```
+mcp__reddit__get_subreddit_posts(subreddit: "<name>", sort: "top", time: "month")
+```
+
+#### `mcp__reddit__get_post` — pull a thread's full comment tree
+
+When `search` or `search_subreddit` returns a clearly load-bearing
+thread (highly upvoted, lots of comments, on-topic), pull the full tree.
+The comments are usually where the actual expertise / lived experience
+lives, not the OP.
+
+```
+mcp__reddit__get_post(post_id: "<id-from-search>")
+```
+
+After reading, persist any load-bearing threads via the standard fetch
+path so the orchestrator and downstream critics can cite them:
+
+```bash
+PYTHONIOENCODING=utf-8 {hpr_path} fetch "<reddit-url>" --tag reddit --tag <topic> -j
+```
+
+#### When to combine Reddit with Exa
+
+- Exa surfaces the canonical primary source (paper, filing, vendor doc).
+  Reddit surfaces how people **reacted** to it. Use BOTH for any
+  contested topic.
+- For "is this technology actually adopted?" questions, Exa alone will
+  over-index on vendor marketing and analyst write-ups. Always cross-
+  check with `r/<vendor>` / `r/<technology>` subreddits.
+- For adversarial searches ("limitations of X", "X criticism") Reddit
+  is often the highest-signal source — practitioners post pain in
+  detail; tech-press articles only summarise it.
+
+#### When NOT to use Reddit
+
+- Hard scientific consensus / methodology questions → academic APIs.
+- Precise numbers from official filings → Exa `category: "financial report"` or fetch the filing directly.
+- Anything where the topic is so niche that no relevant subreddit exists — search will return noise; don't force it.
+
+### 5. `{hpr_path} fetch <url>` — THE PERSISTENCE PATH
 
 ALL search results need to enter the vault before they count. After ANY
 of the search tools above returns a URL you want, fetch it with:
@@ -2895,6 +3021,11 @@ fetched is invisible to the next pipeline step.
 | Code / API / library example                                       | `mcp__exa__get_code_context_exa`                                                  |
 | Known URL, `{hpr_path} fetch` already failed                       | `mcp__exa__crawling_exa`, then persist via `{hpr_path} fetch --force`             |
 | Quick fact-check, Exa overkill                                     | `WebSearch`                                                                       |
+| Real-world user pain / footguns / lived experience                 | `mcp__reddit__search(query: "<topic> problem OR issue OR switching")`             |
+| Focused expertise inside a known community                         | `mcp__reddit__search_subreddit(subreddit, query)`                                 |
+| What practitioners are discussing *right now*                      | `mcp__reddit__get_subreddit_posts(subreddit, sort: "top", time: "month")`         |
+| Full thread + comment tree from a load-bearing Reddit post         | `mcp__reddit__get_post(post_id)`, then persist via `{hpr_path} fetch`             |
+| Adversarial search ("limitations of X", "criticism of X")          | `mcp__reddit__search` + `mcp__exa__web_search_advanced_exa` together              |
 | URL in hand, ready to ingest into vault                            | `{hpr_path} fetch "<url>"`                                                        |
 
 ## Phase 1: Fetch assigned URLs
@@ -3053,7 +3184,7 @@ description: >
   high-leverage missing sources. Runs on Sonnet. Spawn ONCE before
   drafting, after Layer 3.5 comparisons.
 model: sonnet
-tools: Bash, Read, Write, WebSearch, mcp__exa__web_search_exa, mcp__exa__web_search_advanced_exa, mcp__exa__deep_search_exa
+tools: Bash, Read, Write, WebSearch, mcp__exa__web_search_exa, mcp__exa__web_search_advanced_exa, mcp__exa__deep_search_exa, mcp__reddit__search, mcp__reddit__search_subreddit, mcp__reddit__get_post
 color: teal
 ---
 
@@ -3166,6 +3297,22 @@ to drafting.
      )
      ```
 
+   - For a **community / lived-experience gap** (a position is supported
+     only by vendor docs, analyst write-ups, or press; you want to check
+     whether real users / practitioners contradict it), probe Reddit:
+     ```
+     mcp__reddit__search(query: "<position keyword> problem OR issue OR switching OR broken")
+     ```
+     If the position is about a specific technology, product, drug, or
+     framework, also try the obvious subreddit:
+     ```
+     mcp__reddit__search_subreddit(subreddit: "<r/topic>", query: "<keyword>")
+     ```
+     Reddit discontent is high-signal for "consensus is shallower than
+     it looks" — if multiple upvoted threads contradict the committed
+     position, flag the gap as `community-counter-evidence` and cite the
+     thread URLs in `external_probe_hits`.
+
    If the external probe TURNS UP the source you thought was missing,
    it is NOT a gap — the orchestrator should fetch it via step 13's
    gap-fetch wave, not invent another locus to chase. Note the URL(s)
@@ -3183,7 +3330,7 @@ to drafting.
    {{
      "gaps": [
        {{
-         "type": "overturning|strengthening|independent-verification",
+         "type": "overturning|strengthening|independent-verification|community-counter-evidence",
          "target_position": "which claim/position this source would test",
          "search_queries": ["2-3 specific search queries — natural-language describing the ideal page; the gap-fetch step in step 13 will feed these into mcp__exa__web_search_advanced_exa"],
          "preferred_exa_category": "research paper|news|pdf|company|people|financial report|none",
