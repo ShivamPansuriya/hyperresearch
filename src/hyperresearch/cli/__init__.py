@@ -78,8 +78,10 @@ from hyperresearch.cli.watch import watch as _watch
 app.command("install")(_install)
 
 from hyperresearch.cli.setup import setup as _setup
+from hyperresearch.cli.uninstall_mcp import uninstall_mcp as _uninstall_mcp
 
 app.command("setup")(_setup)
+app.command("uninstall-mcp")(_uninstall_mcp)
 app.command("init")(_init)
 app.command("status")(_status)
 app.command("sync")(_sync)

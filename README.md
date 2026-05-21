@@ -379,6 +379,21 @@ If no key is supplied, the Firecrawl install step is skipped silently. The pipel
 
 The installer is idempotent: if any `firecrawl*` MCP entry already exists in `~/.claude.json`, it's left unchanged.
 
+### Removing an MCP
+
+Exa and Firecrawl overlap on web-search and deep extraction — you probably don't need both. To uninstall one without re-running the full install:
+
+```bash
+hyperresearch uninstall-mcp exa         # or: firecrawl | reddit
+```
+
+This:
+
+1. Removes the matching entry from `~/.claude.json` so Claude Code stops launching the server.
+2. Strips every `mcp__<name>__*` token from the `tools:` line of each `~/.claude/agents/hyperresearch-*.md`, so agents don't try to call tools that no longer exist.
+
+The agent prose (fallback ladders like "Exa → WebSearch", "Firecrawl scrape → Exa crawling") is left untouched and still reads sensibly. Restart Claude Code (full quit) so the change takes effect. Idempotent — re-running on an already-removed MCP is a no-op. Reversible — `hyperresearch install --global` re-adds everything from the template.
+
 ---
 
 ## What it doesn't do
