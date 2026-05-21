@@ -112,30 +112,47 @@ def setup(
             profile = _create_profile_interactive()
         # else: skip, profile stays ""
 
+    # Skip MCP key prompts if the corresponding entry already exists in
+    # ~/.claude.json — the installers are idempotent and won't overwrite
+    # an existing entry, so asking for the key would be wasted typing.
+    from hyperresearch.core.exa_mcp import existing_exa_entry
+    from hyperresearch.core.firecrawl_mcp import existing_firecrawl_entry
+    _mcp_servers = _read_mcp_servers()
+    exa_already = existing_exa_entry(_mcp_servers) is not None
+    firecrawl_already = existing_firecrawl_entry(_mcp_servers) is not None
+
     # ── Step 3: Exa MCP API key (optional) ────────────────────────
     console.print()
     console.print(Rule("[bold]Step 3[/]  Exa MCP API key (optional)", style="cyan"))
     console.print()
-    console.print("  [dim]Exa is a neural web-search engine. With an API key, the[/]")
-    console.print("  [dim]fetcher + corpus-critic agents use Exa's hosted MCP for[/]")
-    console.print("  [dim]higher-signal discovery. Get a key at https://exa.ai[/]")
-    console.print()
-    console.print("  [dim]Press Enter to skip — pipeline still works with WebSearch.[/]")
-    console.print()
-    exa_api_key = Prompt.ask("  Exa API key (or blank to skip)", default="").strip()
+    if exa_already:
+        console.print("  [dim]Exa MCP already configured in ~/.claude.json — skipping prompt.[/]")
+        exa_api_key = ""
+    else:
+        console.print("  [dim]Exa is a neural web-search engine. With an API key, the[/]")
+        console.print("  [dim]fetcher + corpus-critic agents use Exa's hosted MCP for[/]")
+        console.print("  [dim]higher-signal discovery. Get a key at https://exa.ai[/]")
+        console.print()
+        console.print("  [dim]Press Enter to skip — pipeline still works with WebSearch.[/]")
+        console.print()
+        exa_api_key = Prompt.ask("  Exa API key (or blank to skip)", default="").strip()
 
     # ── Step 3b: Firecrawl MCP API key (optional) ─────────────────
     console.print()
     console.print(Rule("[bold]Step 3b[/]  Firecrawl MCP API key (optional)", style="cyan"))
     console.print()
-    console.print("  [dim]Firecrawl scrapes JS-heavy pages, crawls whole domains, and[/]")
-    console.print("  [dim]extracts structured data via LLM schemas. Highly complementary[/]")
-    console.print("  [dim]to Exa: Exa finds URLs, Firecrawl extracts their full content.[/]")
-    console.print("  [dim]Get a key at https://firecrawl.dev[/]")
-    console.print()
-    console.print("  [dim]Press Enter to skip — pipeline still works with `hyperresearch fetch`.[/]")
-    console.print()
-    firecrawl_api_key = Prompt.ask("  Firecrawl API key (or blank to skip)", default="").strip()
+    if firecrawl_already:
+        console.print("  [dim]Firecrawl MCP already configured in ~/.claude.json — skipping prompt.[/]")
+        firecrawl_api_key = ""
+    else:
+        console.print("  [dim]Firecrawl scrapes JS-heavy pages, crawls whole domains, and[/]")
+        console.print("  [dim]extracts structured data via LLM schemas. Highly complementary[/]")
+        console.print("  [dim]to Exa: Exa finds URLs, Firecrawl extracts their full content.[/]")
+        console.print("  [dim]Get a key at https://firecrawl.dev[/]")
+        console.print()
+        console.print("  [dim]Press Enter to skip — pipeline still works with `hyperresearch fetch`.[/]")
+        console.print()
+        firecrawl_api_key = Prompt.ask("  Firecrawl API key (or blank to skip)", default="").strip()
 
     # ── Execute ───────────────────────────────────────────────────
     console.print()
@@ -244,6 +261,18 @@ def setup(
 
 
 # ── Helpers ─────────────────────────────────────────────────────
+
+
+def _read_mcp_servers() -> dict:
+    """Return the mcpServers dict from ~/.claude.json, or {} if missing/unreadable."""
+    import json
+    target = Path.home() / ".claude.json"
+    if not target.exists():
+        return {}
+    try:
+        return json.loads(target.read_text(encoding="utf-8")).get("mcpServers", {}) or {}
+    except (json.JSONDecodeError, OSError):
+        return {}
 
 
 def _pick_existing_profile(profiles: list[str]) -> str:
