@@ -28,19 +28,35 @@
 ### One-click install (this fork — includes both `/hyperresearch` AND `/hyperresearch-prd`)
 
 ```bash
+pip install git+https://github.com/ShivamPansuriya/hyperresearch.git@prd-extension && hyperresearch setup
+```
+
+That single line installs the fork and launches the interactive setup TUI, which walks through:
+
+- **Exa API key** — press Enter to skip (pipeline falls back to `WebSearch` + academic APIs)
+- **Reddit MCP** — auto-installs via `uvx` if available, no key needed
+- **Firecrawl API key** — press Enter to skip
+- **Skills + subagents** registration (global or per-project)
+
+Restart Claude Code afterwards so the new MCP servers load. Then `/hyperresearch <anything>` and `/hyperresearch-prd <feature request>` in any session.
+
+**Non-interactive variant** (flags / env vars only, no prompts — good for CI or repeat installs):
+
+```bash
 pip install git+https://github.com/ShivamPansuriya/hyperresearch.git@prd-extension && hyperresearch install --global
 ```
 
-That single line installs the package from this fork's `prd-extension` branch and registers all skills + subagents globally. After it finishes, `/hyperresearch` and `/hyperresearch-prd` are available in every Claude Code session.
+Add `--exa-api-key sk-exa-...` and `--firecrawl-api-key fc-...` (or set `EXA_API_KEY` / `FIRECRAWL_API_KEY` in the env) to wire up MCPs without prompts. Omit the keys to skip those MCPs silently. Use `hyperresearch install` (no `--global`) inside a project directory for a cleaner system-reminder footprint.
 
-Per-project install (cleaner system-reminder footprint):
+**If pip refuses with PEP 668 / "externally-managed-environment":** install into a venv first.
 
 ```bash
-cd your-project
-pip install git+https://github.com/ShivamPansuriya/hyperresearch.git@prd-extension && hyperresearch install
+python3 -m venv ~/.gsd/.venv \
+  && ~/.gsd/.venv/bin/pip install git+https://github.com/ShivamPansuriya/hyperresearch.git@prd-extension \
+  && ~/.gsd/.venv/bin/hyperresearch setup
 ```
 
-Then `/hyperresearch <anything>` and `/hyperresearch-prd <feature request>` in Claude Code.
+Then add `export PATH="$HOME/.gsd/.venv/bin:$PATH"` to your shell rc so `hyperresearch` resolves without the full venv path.
 
 ### Upstream-only install (research pipeline without the PRD extension)
 
