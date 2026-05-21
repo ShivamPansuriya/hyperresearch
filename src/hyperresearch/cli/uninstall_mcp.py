@@ -1,17 +1,20 @@
-"""Remove an MCP server (exa | firecrawl | reddit) installed by `hyperresearch install`.
+"""Remove an MCP (exa | firecrawl | reddit) from hyperresearch's agents.
+
+Edits ONLY the hyperresearch-installed agent files in ~/.claude/agents/.
+The MCP server entry in ~/.claude.json is intentionally LEFT IN PLACE —
+Claude Code keeps the MCP available for other agents, slash commands, or
+direct user calls; hyperresearch's own pipeline just stops referencing it.
 
 Two-step cleanup:
-  1. Delete the matching `mcpServers` entry from ~/.claude.json
-  2. Strip every `mcp__<name>__*` token from the `tools:` frontmatter line of
-     each ~/.claude/agents/hyperresearch-*.md (so agents don't try to call
-     tools that no longer exist).
+  1. Strip every `mcp__<name>__*` token from the `tools:` frontmatter
+     line of each ~/.claude/agents/hyperresearch-*.md.
+  2. Strip MCP-specific prose: numbered `### N. <McpName>` sections,
+     code fences mentioning the tool, and table rows / bullets keyed
+     on the tool.
 
-Prose inside agent bodies is left untouched — fallback ladders like
-"Exa → WebSearch" still read sensibly even when Exa is gone.
-
-Idempotent: re-running on an already-removed MCP is a no-op and reports so.
-Reversible: re-running `hyperresearch install --global` re-adds everything
-from the template.
+Idempotent: re-running on an already-removed MCP is a no-op.
+Reversible: re-running `hyperresearch install --global` re-adds
+everything from the template.
 """
 
 from __future__ import annotations
@@ -19,7 +22,6 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Literal
 
 import typer
 from rich.console import Console
@@ -28,14 +30,12 @@ console = Console()
 
 _KNOWN = ("exa", "firecrawl", "reddit")
 
-Action = Literal["removed", "not_present", "error"]
-
 
 def uninstall_mcp(
     name: str = typer.Argument(..., help=f"MCP to remove: {' | '.join(_KNOWN)}"),
     json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
 ) -> None:
-    """Remove an MCP server entry and its tool registrations from installed agents."""
+    """Strip an MCP from hyperresearch's agent files. Leaves ~/.claude.json untouched."""
     name = name.lower().strip()
     if name not in _KNOWN:
         msg = f"unknown MCP '{name}'. Choose one of: {', '.join(_KNOWN)}"
@@ -45,7 +45,6 @@ def uninstall_mcp(
             console.print(f"  [red]error:[/] {msg}")
         raise typer.Exit(2)
 
-    server_action, server_msg = _remove_server_entry(name)
     tools_changed, agents_total = _strip_agent_tools(name)
     prose_changed = _strip_agent_prose(name)
 
@@ -55,7 +54,6 @@ def uninstall_mcp(
                 {
                     "ok": True,
                     "name": name,
-                    "server": {"action": server_action, "message": server_msg},
                     "agents": {
                         "tools_updated": tools_changed,
                         "prose_updated": prose_changed,
@@ -66,37 +64,7 @@ def uninstall_mcp(
         )
         return
 
-    _print_summary(
-        name, server_action, server_msg, tools_changed, prose_changed, agents_total
-    )
-
-
-# ── server entry ────────────────────────────────────────────────
-
-
-def _remove_server_entry(name: str) -> tuple[Action, str]:
-    target = Path.home() / ".claude.json"
-    if not target.exists():
-        return ("not_present", f"{target} does not exist")
-
-    try:
-        config = json.loads(target.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as e:
-        return ("error", f"failed to parse {target}: {e}")
-
-    servers = config.get("mcpServers", {})
-    matched = [k for k in servers if k.lower().startswith(name)]
-    if not matched:
-        return ("not_present", f"no '{name}*' entry in mcpServers")
-
-    for key in matched:
-        del servers[key]
-
-    target.write_text(
-        json.dumps(config, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
-    return ("removed", f"removed entries: {', '.join(matched)}")
+    _print_summary(name, tools_changed, prose_changed, agents_total)
 
 
 # ── agent tools: lines ─────────────────────────────────────────
@@ -231,16 +199,13 @@ def _strip_agent_prose(name: str) -> int:
 
 def _print_summary(
     name: str,
-    server_action: Action,
-    server_msg: str,
     tools_changed: int,
     prose_changed: int,
     agents_total: int,
 ) -> None:
-    color = {"removed": "green", "not_present": "yellow", "error": "red"}[server_action]
     console.print()
-    console.print(f"  [bold]Removing {name} MCP[/]")
-    console.print(f"  [{color}]~/.claude.json:[/] {server_msg}")
+    console.print(f"  [bold]Removing {name} from hyperresearch agents[/]")
+    console.print("  [dim]~/.claude.json:[/] left unchanged (MCP stays available to Claude Code)")
     if agents_total == 0:
         console.print("  [yellow]~/.claude/agents/:[/] no agent files found (was hyperresearch installed?)")
     else:

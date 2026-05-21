@@ -379,9 +379,9 @@ If no key is supplied, the Firecrawl install step is skipped silently. The pipel
 
 The installer is idempotent: if any `firecrawl*` MCP entry already exists in `~/.claude.json`, it's left unchanged.
 
-### Removing an MCP
+### Removing an MCP from hyperresearch's agents
 
-Exa and Firecrawl overlap on web-search and deep extraction — you probably don't need both. To uninstall one without re-running the full install:
+Exa and Firecrawl overlap on web-search and deep extraction — you probably don't need both inside the research pipeline. To drop one from hyperresearch's agents without touching Claude Code's MCP wiring:
 
 ```bash
 hyperresearch uninstall-mcp exa         # or: firecrawl | reddit
@@ -389,10 +389,12 @@ hyperresearch uninstall-mcp exa         # or: firecrawl | reddit
 
 This:
 
-1. Removes the matching entry from `~/.claude.json` so Claude Code stops launching the server.
-2. Strips every `mcp__<name>__*` token from the `tools:` line of each `~/.claude/agents/hyperresearch-*.md`, so agents don't try to call tools that no longer exist.
+1. Strips every `mcp__<name>__*` token from the `tools:` line of each `~/.claude/agents/hyperresearch-*.md`.
+2. Removes MCP-specific prose from agent bodies — whole `### N. <McpName>` sections, code fences mentioning the tool, and decision-table rows / bullets keyed on the tool. All removals are delimiter-bounded (header-to-header, fence-to-fence, whole-line) so markdown structure stays valid.
 
-The agent prose (fallback ladders like "Exa → WebSearch", "Firecrawl scrape → Exa crawling") is left untouched and still reads sensibly. Restart Claude Code (full quit) so the change takes effect. Idempotent — re-running on an already-removed MCP is a no-op. Reversible — `hyperresearch install --global` re-adds everything from the template.
+**The `~/.claude.json` entry is intentionally left in place** — Claude Code keeps the MCP available for other agents, slash commands, or direct user calls. Only hyperresearch's pipeline stops using it. If you also want Claude Code to stop launching the server, edit `~/.claude.json` by hand or use Claude Code's own `mcp remove` command.
+
+Restart Claude Code (full quit) so the change takes effect. Idempotent — re-running on an already-removed MCP is a no-op. Reversible — `hyperresearch install --global` re-adds everything from the template.
 
 ---
 
