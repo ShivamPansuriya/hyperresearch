@@ -46,7 +46,8 @@ def uninstall_mcp(
         raise typer.Exit(2)
 
     server_action, server_msg = _remove_server_entry(name)
-    agents_changed, agents_total = _strip_agent_tools(name)
+    tools_changed, agents_total = _strip_agent_tools(name)
+    prose_changed = _strip_agent_prose(name)
 
     if json_output:
         typer.echo(
@@ -55,13 +56,19 @@ def uninstall_mcp(
                     "ok": True,
                     "name": name,
                     "server": {"action": server_action, "message": server_msg},
-                    "agents": {"updated": agents_changed, "scanned": agents_total},
+                    "agents": {
+                        "tools_updated": tools_changed,
+                        "prose_updated": prose_changed,
+                        "scanned": agents_total,
+                    },
                 }
             )
         )
         return
 
-    _print_summary(name, server_action, server_msg, agents_changed, agents_total)
+    _print_summary(
+        name, server_action, server_msg, tools_changed, prose_changed, agents_total
+    )
 
 
 # ── server entry ────────────────────────────────────────────────
@@ -129,6 +136,96 @@ def _strip_agent_tools(name: str) -> tuple[int, int]:
     return (changed, len(files))
 
 
+# ── agent prose blocks ─────────────────────────────────────────
+
+
+def _strip_agent_prose(name: str) -> int:
+    """Strip MCP-specific prose from each ~/.claude/agents/hyperresearch-*.md.
+
+    Three removal units, each delimiter-bounded so the surrounding markdown
+    structure is never broken:
+
+      A. Numbered `### N. <McpName>` sections — header to next `### ` header.
+      B. Triple-backtick fenced blocks whose body contains `mcp__<name>__`.
+      C. Single bullet lines whose first non-blank token starts with
+         `mcp__<name>__`, AND markdown table rows (`| ... |`) containing
+         a `mcp__<name>__` token in any cell. Both are removed whole-line
+         so the table layout stays valid.
+
+    Returns the number of agent files whose body changed.
+    """
+    agents_dir = Path.home() / ".claude" / "agents"
+    if not agents_dir.exists():
+        return 0
+
+    token = f"mcp__{name}__"
+    # Header pattern: `### <digits>. <McpName-or-mcp__name__-prefix>`
+    # The name may appear as `Exa`, `Reddit`, `Firecrawl`, or as the
+    # raw `mcp__name__*` form depending on how the template wrote it.
+    name_alts = [name.capitalize(), token]
+    header_alt_re = "(?:" + "|".join(re.escape(a) for a in name_alts) + ")"
+    section_header_re = re.compile(
+        rf"^### \d+\.\s+`?{header_alt_re}", re.IGNORECASE
+    )
+    any_h3_re = re.compile(r"^### ")
+    fence_re = re.compile(r"^```")
+    # Bullet whose first non-blank token starts with the MCP prefix.
+    bullet_token_re = re.compile(
+        rf"^\s*(?:[-*+]\s+)?`?{re.escape(token)}"
+    )
+    # Markdown table row containing the MCP token in ANY cell.
+    table_row_re = re.compile(rf"^\s*\|.*{re.escape(token)}")
+
+    changed = 0
+    for path in sorted(agents_dir.glob("hyperresearch-*.md")):
+        original = path.read_text(encoding="utf-8")
+        lines = original.splitlines(keepends=True)
+        out: list[str] = []
+        i = 0
+        n = len(lines)
+        while i < n:
+            line = lines[i]
+
+            # (A) numbered MCP section — skip until next `### `
+            if section_header_re.match(line):
+                i += 1
+                while i < n and not any_h3_re.match(lines[i]):
+                    i += 1
+                continue
+
+            # (B) fenced block — buffer until close fence, drop if matched
+            if fence_re.match(line):
+                start = i
+                buf = [line]
+                i += 1
+                while i < n and not fence_re.match(lines[i]):
+                    buf.append(lines[i])
+                    i += 1
+                if i < n:
+                    buf.append(lines[i])  # closing fence
+                    i += 1
+                if any(token in b for b in buf):
+                    continue  # drop the whole fence
+                out.extend(buf)
+                continue
+
+            # (C) single bullet starting with the MCP token, OR table
+            # row containing the MCP token in any cell
+            if bullet_token_re.match(line) or table_row_re.match(line):
+                i += 1
+                continue
+
+            out.append(line)
+            i += 1
+
+        new_text = "".join(out)
+        if new_text != original:
+            path.write_text(new_text, encoding="utf-8")
+            changed += 1
+
+    return changed
+
+
 # ── output ──────────────────────────────────────────────────────
 
 
@@ -136,7 +233,8 @@ def _print_summary(
     name: str,
     server_action: Action,
     server_msg: str,
-    agents_changed: int,
+    tools_changed: int,
+    prose_changed: int,
     agents_total: int,
 ) -> None:
     color = {"removed": "green", "not_present": "yellow", "error": "red"}[server_action]
@@ -145,12 +243,16 @@ def _print_summary(
     console.print(f"  [{color}]~/.claude.json:[/] {server_msg}")
     if agents_total == 0:
         console.print("  [yellow]~/.claude/agents/:[/] no agent files found (was hyperresearch installed?)")
-    elif agents_changed == 0:
-        console.print(f"  [dim]~/.claude/agents/:[/] no `mcp__{name}__*` tokens found in {agents_total} agent file(s)")
     else:
+        tools_color = "green" if tools_changed else "dim"
+        prose_color = "green" if prose_changed else "dim"
         console.print(
-            f"  [green]~/.claude/agents/:[/] stripped `mcp__{name}__*` tokens from "
-            f"{agents_changed}/{agents_total} agent file(s)"
+            f"  [{tools_color}]agent tools:[/] stripped `mcp__{name}__*` from "
+            f"{tools_changed}/{agents_total} `tools:` line(s)"
+        )
+        console.print(
+            f"  [{prose_color}]agent prose:[/] removed sections / fences / rows from "
+            f"{prose_changed}/{agents_total} agent body file(s)"
         )
     console.print()
     console.print("  [dim]Restart Claude Code (full quit) so the change takes effect.[/]")
